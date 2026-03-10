@@ -6,9 +6,31 @@ from models.detector import PersonDetector
 from models.gait_model import GaitModel
 from utils.embeddings import save_embedding
 
+DROIDCAM_URL = "http://192.168.0.183:4747/video"
+
+
+def select_camera():
+    print("\n[CAMERA] Select registration camera:")
+    print("  1 → Laptop webcam")
+    print("  2 → iPhone (DroidCam WiFi)")
+    choice = input("Enter 1 or 2: ").strip()
+    if choice == "2":
+        print(f"[CAMERA] Using iPhone DroidCam: {DROIDCAM_URL}")
+        print("[CAMERA] Make sure DroidCam PC client is CLOSED and iPhone app is open.\n")
+        return DROIDCAM_URL
+    else:
+        print("[CAMERA] Using laptop webcam (index 0)\n")
+        return 0
+
 
 def register_gait(person_id):
-    cap = cv2.VideoCapture(0)
+    source = select_camera()
+    cap = cv2.VideoCapture(source)
+
+    if not cap.isOpened():
+        print(f"[REGISTER] ❌ Could not open camera: {source}")
+        return
+
     detector = PersonDetector()
     gait_model = GaitModel()
 
@@ -19,7 +41,7 @@ def register_gait(person_id):
 
     frame_sequence = []
     MIN_FRAMES = 20
-    MAX_FRAMES = 30   # cap so we don't use too-old frames
+    MAX_FRAMES = 30
 
     while True:
         ret, frame = cap.read()
@@ -41,7 +63,6 @@ def register_gait(person_id):
 
             frame_sequence.append(body_crop)
 
-            # Keep only the most recent MAX_FRAMES frames
             if len(frame_sequence) > MAX_FRAMES:
                 frame_sequence.pop(0)
 
@@ -54,13 +75,17 @@ def register_gait(person_id):
             cv2.putText(display, status,
                         (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
+        # Show which camera is active
+        cam_label = "iPhone (DroidCam)" if source != 0 else "Laptop Webcam"
+        cv2.putText(display, f"CAM: {cam_label}", (10, display.shape[0] - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 0), 1)
+
         cv2.imshow(f"Register Gait — {person_id}", display)
-        key = cv2.waitKey(1)
+        key = cv2.waitKey(1) & 0xFF
 
         if key == ord('s'):
             if len(frame_sequence) >= MIN_FRAMES:
                 try:
-                    # Use whichever method your GaitModel exposes
                     if hasattr(gait_model, 'get_embedding'):
                         emb = gait_model.get_embedding(frame_sequence[-MAX_FRAMES:])
                     elif hasattr(gait_model, 'extract_gait_embedding'):

@@ -6,9 +6,31 @@ from models.face_model import FaceRecognizer
 from models.detector import PersonDetector
 from utils.embeddings import save_embedding
 
+DROIDCAM_URL = "http://192.168.0.183:4747/video"
+
+
+def select_camera():
+    print("\n[CAMERA] Select registration camera:")
+    print("  1 → Laptop webcam")
+    print("  2 → iPhone (DroidCam WiFi)")
+    choice = input("Enter 1 or 2: ").strip()
+    if choice == "2":
+        print(f"[CAMERA] Using iPhone DroidCam: {DROIDCAM_URL}")
+        print("[CAMERA] Make sure DroidCam PC client is CLOSED and iPhone app is open.\n")
+        return DROIDCAM_URL
+    else:
+        print("[CAMERA] Using laptop webcam (index 0)\n")
+        return 0
+
 
 def register_person(person_id):
-    cap = cv2.VideoCapture(0)
+    source = select_camera()
+    cap = cv2.VideoCapture(source)
+
+    if not cap.isOpened():
+        print(f"[REGISTER] ❌ Could not open camera: {source}")
+        return
+
     face_model = FaceRecognizer()
     detector = PersonDetector()
 
@@ -20,7 +42,7 @@ def register_person(person_id):
     print("  - ESC to quit\n")
 
     collected = []
-    TARGET = 20   # Fix 1 — increased from 15, stored as stack not average
+    TARGET = 20
 
     while True:
         ret, frame = cap.read()
@@ -60,8 +82,13 @@ def register_person(person_id):
             cv2.putText(display, "No person detected",
                         (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
+        # Show which camera is active
+        cam_label = "iPhone (DroidCam)" if source != 0 else "Laptop Webcam"
+        cv2.putText(display, f"CAM: {cam_label}", (10, display.shape[0] - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 0), 1)
+
         cv2.imshow(f"Register Face — {person_id}", display)
-        key = cv2.waitKey(1)
+        key = cv2.waitKey(1) & 0xFF
 
         if key == ord('s'):
             if face_found:
@@ -73,7 +100,6 @@ def register_person(person_id):
                     crop = frame[y1:y2, x1:x2]
                     emb = face_model.get_embedding(crop)
                     if emb is not None:
-                        # Normalize each sample individually before storing
                         emb = emb / np.linalg.norm(emb)
                         collected.append(emb)
                         print(f"  Sample {len(collected)}/{TARGET} captured  "
@@ -81,8 +107,6 @@ def register_person(person_id):
                         break
 
                 if len(collected) >= TARGET:
-                    # Fix 1 — save full stack (N, 512) instead of averaged vector
-                    # Matcher will score against each exemplar and take max
                     stack = np.stack(collected)   # shape (TARGET, 512)
                     save_embedding(person_id, stack, "face")
                     print(f"\n[REGISTER] ✅ Saved {TARGET} face exemplars for {person_id}")
