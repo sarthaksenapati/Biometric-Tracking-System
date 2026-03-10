@@ -15,13 +15,48 @@ except ImportError:
 class FaceRecognizer:
     def __init__(self):
         if INSIGHTFACE_AVAILABLE:
-            # det_size controls how small a face it will detect
-            # (320,320) finds faces at greater distances than (640,640)
+            import onnxruntime as ort
+
+            # InsightFace ignores providers= in newer versions — it rebuilds
+            # InferenceSession internally with its own logic.
+            # Fix: monkey-patch onnxruntime.InferenceSession.__init__ BEFORE
+            # InsightFace loads any model so every session gets CUDA forced in.
+            _original_session_init = ort.InferenceSession.__init__
+
+            def _force_cuda_init(self_session, model_path, sess_options=None,
+                                 providers=None, provider_options=None, **kwargs):
+                _original_session_init(
+                    self_session, model_path,
+                    sess_options=sess_options,
+                    providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+                    provider_options=provider_options,
+                    **kwargs
+                )
+
+            ort.InferenceSession.__init__ = _force_cuda_init
+
             self.app = FaceAnalysis(
-                name="buffalo_sc",   # lightweight, fast model
-                providers=["CPUExecutionProvider"]
+                name="buffalo_sc",
+                providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
             )
+            # ctx_id=0 = GPU 0 (RTX 4060)
             self.app.prepare(ctx_id=0, det_size=(320, 320))
+
+            # Restore original session init so other code is unaffected
+            ort.InferenceSession.__init__ = _original_session_init
+
+            # Verify which provider was actually loaded
+            active = []
+            for model in self.app.models.values():
+                if hasattr(model, 'session'):
+                    active += model.session.get_providers()
+            if active:
+                providers_used = list(set(active))
+                gpu = "CUDAExecutionProvider" in providers_used
+                print(f"[FaceModel] ONNX providers: {providers_used} — {'GPU' if gpu else 'CPU only'}")
+            else:
+                print("[FaceModel] Could not verify ONNX providers")
+
             self.backend = "insightface"
             print("[FaceModel] Using InsightFace (better at distance)")
         else:
