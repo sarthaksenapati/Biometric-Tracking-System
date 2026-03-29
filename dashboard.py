@@ -4,31 +4,25 @@
 #
 # USAGE:
 # ──────
-# Run BOTH of these in separate terminals:
-#
-#   Terminal 1 (live video + tracking):
-#       python run_tracker_multi.py
-#
-#   Terminal 2 (dashboard):
-#       python -m streamlit run dashboard.py
-#
-# The tracker writes state to tracker_state.json every second.
-# The dashboard reads from that file — no shared memory, no model loading.
+# Terminal 1:  python run_tracker_multi.py
+# Terminal 2:  python -m streamlit run dashboard.py
 
 import time
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import streamlit as st
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
 
-STATE_FILE         = "tracker_state.json"   # written by run_tracker_multi.py
-REFRESH_INTERVAL_S = 2
-MAX_EVENTS_SHOWN   = 40
-STALE_THRESHOLD_S  = 5    # if state file not updated for this long → show warning
+STATE_FILE              = "tracker_state.json"
+HISTORY_FILE            = "tracker_history.json"   # persistent across sessions
+REFRESH_INTERVAL_S      = 2
+MAX_EVENTS_SHOWN        = 60
+STALE_THRESHOLD_S       = 5
+HISTORY_RETENTION_DAYS  = 7   # keep 7 days of history
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Page config
@@ -40,10 +34,6 @@ st.set_page_config(
     layout                = "wide",
     initial_sidebar_state = "expanded",
 )
-
-# ─────────────────────────────────────────────────────────────────────────────
-# CSS
-# ─────────────────────────────────────────────────────────────────────────────
 
 st.markdown("""
 <style>
@@ -62,6 +52,7 @@ st.markdown("""
     .ev-row          { padding: 5px 0; border-bottom: 1px solid #313244; font-size: 0.88rem; }
     .ev-handoff      { color: #fab387; font-weight: 600; }
     .ev-sighting     { color: #89dceb; }
+    .ev-old          { opacity: 0.6; }
 
     .cam-online      { color: #a6e3a1; font-weight: 700; }
     .cam-offline     { color: #f38ba8; font-weight: 700; }
@@ -72,34 +63,150 @@ st.markdown("""
     .ok-banner       { background:#1e2e1e; border-left:4px solid #a6e3a1;
                        padding:10px 14px; border-radius:6px; color:#a6e3a1;
                        font-size:0.9rem; margin-bottom:12px; }
+    .search-found    { background:#1e2e1e; border-left:4px solid #89b4fa;
+                       padding:10px 14px; border-radius:6px; margin-top:8px; }
+    .search-past     { background:#2e2e1e; border-left:4px solid #f9e2af;
+                       padding:10px 14px; border-radius:6px; margin-top:8px;
+                       color:#f9e2af; font-size:0.9rem; }
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Read state from file
+# Helper: format age
+# (defined early so it can be called anywhere below, including the sidebar)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _fmt_age(seconds: float) -> str:
+    if seconds < 60:
+        return f"{seconds:.0f}s"
+    if seconds < 3600:
+        return f"{seconds/60:.0f}m"
+    if seconds < 86400:
+        return f"{seconds/3600:.1f}h"
+    return f"{seconds/86400:.1f}d"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Load state and history
 # ─────────────────────────────────────────────────────────────────────────────
 
 def load_state() -> dict | None:
-    """
-    Read the latest tracker state from tracker_state.json.
-    Returns None if file doesn't exist or is unreadable.
-    """
     if not os.path.exists(STATE_FILE):
         return None
     try:
         with open(STATE_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, OSError):
-        # File may be mid-write — just skip this refresh cycle
         return None
 
 
-state       = load_state()
-file_exists = state is not None
-file_age    = (time.time() - state["written_at"]) if state else None
+def load_history() -> dict:
+    """
+    Load persistent history file.
+    Structure:
+    {
+      "last_seen": { "PersonName": {"location": ..., "timestamp": ..., "confidence": ...} },
+      "events":    [ {sighting/handoff event dicts} ... ]
+    }
+    """
+    if not os.path.exists(HISTORY_FILE):
+        return {"last_seen": {}, "events": []}
+    try:
+        with open(HISTORY_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {"last_seen": {}, "events": []}
+
+
+def merge_and_save_history(current_state: dict):
+    """
+    Merge current tracker_state.json events into tracker_history.json.
+    Called every dashboard refresh so history stays up to date.
+    Deduplicates by timestamp+person+type.
+    Prunes events older than HISTORY_RETENTION_DAYS.
+    """
+    if not current_state:
+        return
+
+    history = load_history()
+    cutoff  = time.time() - HISTORY_RETENTION_DAYS * 86400
+
+    # Build a set of existing event keys to avoid duplicates
+    existing_keys = set()
+    for e in history["events"]:
+        key = (e.get("type"), e.get("person"), round(e.get("timestamp", 0), 1))
+        existing_keys.add(key)
+
+    # Merge new events from current state
+    new_events = []
+    for e in current_state.get("events", []):
+        key = (e.get("type"), e.get("person"), round(e.get("timestamp", 0), 1))
+        if key not in existing_keys:
+            new_events.append(e)
+            existing_keys.add(key)
+
+    history["events"].extend(new_events)
+
+    # Prune old events
+    history["events"] = [
+        e for e in history["events"]
+        if e.get("timestamp", 0) >= cutoff
+    ]
+
+    # Update last_seen for each active person
+    for person in current_state.get("active_people", []):
+        name = person.get("name")
+        if not name or name == "Unknown":
+            continue
+        existing = history["last_seen"].get(name)
+        if existing is None or person["last_seen"] > existing["timestamp"]:
+            history["last_seen"][name] = {
+                "location":   person["location"],
+                "timestamp":  person["last_seen"],
+                "confidence": person["confidence"],
+                "cam_id":     person.get("cam_id"),
+            }
+
+    # Also update last_seen from sighting events
+    for e in current_state.get("events", []):
+        if e.get("type") != "sighting":
+            continue
+        name = e.get("person")
+        if not name or name == "Unknown":
+            continue
+        existing = history["last_seen"].get(name)
+        if existing is None or e["timestamp"] > existing["timestamp"]:
+            history["last_seen"][name] = {
+                "location":   e["location"],
+                "timestamp":  e["timestamp"],
+                "confidence": e.get("confidence", 0),
+                "cam_id":     e.get("cam_id"),
+            }
+
+    # Prune last_seen entries older than retention
+    history["last_seen"] = {
+        name: info for name, info in history["last_seen"].items()
+        if info.get("timestamp", 0) >= cutoff
+    }
+
+    try:
+        with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+            json.dump(history, f, indent=2)
+    except OSError as exc:
+        st.warning(f"Could not write history: {exc}")
+
+
+# ── Load everything ────────────────────────────────────────────────────────────
+
+state        = load_state()
+file_exists  = state is not None
+file_age     = (time.time() - state["written_at"]) if state else None
 tracker_live = file_exists and file_age is not None and file_age < STALE_THRESHOLD_S
 
-# Unpack state safely
+# Merge current state into persistent history
+if state:
+    merge_and_save_history(state)
+
+history       = load_history()
 active_people = state.get("active_people", []) if state else []
 all_events    = state.get("events",         []) if state else []
 cameras       = state.get("cameras",        []) if state else []
@@ -116,10 +223,10 @@ with st.sidebar:
     st.markdown("*Dashboard — monitoring only*")
     st.markdown("---")
 
-    # ── Tracker connection status ──────────────────────────────────────────
+    # ── Tracker status ────────────────────────────────────────────────────
     st.markdown("#### 🔌 Tracker Status")
     if not file_exists:
-        st.error("tracker_state.json not found.\nStart the tracker first:\n`python run_tracker_multi.py`")
+        st.error("tracker_state.json not found.\nStart:\n`python run_tracker_multi.py`")
     elif not tracker_live:
         st.warning(f"State file is {file_age:.0f}s old — tracker may have stopped.")
     else:
@@ -127,7 +234,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # ── Camera status ──────────────────────────────────────────────────────
+    # ── Camera status ─────────────────────────────────────────────────────
     st.markdown("#### 📷 Cameras")
     if cameras:
         for cam in cameras:
@@ -143,44 +250,93 @@ with st.sidebar:
 
     st.markdown("---")
 
-    # ── Person search ──────────────────────────────────────────────────────
+    # ── Person search ─────────────────────────────────────────────────────
     st.markdown("#### 🔍 Find Person")
+    st.caption("Searches current session AND history across restarts")
     search_raw = st.text_input(
-        "Name", placeholder="e.g. Prityanshu",
+        "Name", placeholder="e.g. Vineet",
         label_visibility="collapsed"
     )
 
     if search_raw.strip():
         search_lower = search_raw.strip().lower()
-        match = next(
+
+        # 1. Check if currently active
+        active_match = next(
             (p for p in active_people if p["name"].lower() == search_lower),
             None,
         )
-        if match:
-            age = time.time() - match["last_seen"]
-            st.success(
-                f"**{match['name']}** is at **{match['location']}**  \n"
-                f"Confidence: {int(match['confidence'] * 100)}%  |  "
-                f"Last seen {age:.0f}s ago"
+
+        if active_match:
+            age = time.time() - active_match["last_seen"]
+            st.markdown(
+                f'<div class="search-found">'
+                f'🟢 <b>{active_match["name"]}</b> is currently at '
+                f'<b>{active_match["location"]}</b><br>'
+                f'Confidence: {int(active_match["confidence"] * 100)}%  ·  '
+                f'Last seen {age:.0f}s ago'
+                f'</div>',
+                unsafe_allow_html=True,
             )
         else:
-            # Check event log for most recent sighting
-            past = [e for e in reversed(all_events)
-                    if e.get("type") == "sighting"
-                    and e.get("person", "").lower() == search_lower]
-            if past:
-                e   = past[0]
+            # 2. Check current session events
+            session_past = [
+                e for e in reversed(all_events)
+                if e.get("type") == "sighting"
+                and e.get("person", "").lower() == search_lower
+            ]
+
+            # 3. Check persistent history
+            history_match = next(
+                (
+                    (name, info)
+                    for name, info in history["last_seen"].items()
+                    if name.lower() == search_lower
+                ),
+                None,
+            )
+
+            if session_past:
+                e   = session_past[0]
                 age = time.time() - e["timestamp"]
-                st.info(
-                    f"**{search_raw}** was last seen at **{e['location']}**  \n"
-                    f"{age:.0f}s ago (no longer in active window)"
+                st.markdown(
+                    f'<div class="search-past">'
+                    f'🟡 <b>{search_raw}</b> was last seen at '
+                    f'<b>{e["location"]}</b><br>'
+                    f'{_fmt_age(age)} ago (this session, no longer in active window)'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            elif history_match:
+                name, info = history_match
+                age  = time.time() - info["timestamp"]
+                when = datetime.fromtimestamp(info["timestamp"]).strftime(
+                    "%d %b %Y  %H:%M:%S"
+                )
+                st.markdown(
+                    f'<div class="search-past">'
+                    f'🕐 <b>{name}</b> was last seen at '
+                    f'<b>{info["location"]}</b><br>'
+                    f'{when}  ({_fmt_age(age)} ago) — from a previous session'
+                    f'</div>',
+                    unsafe_allow_html=True,
                 )
             else:
-                st.warning(f"'{search_raw}' not found.")
+                st.warning(f"'{search_raw}' not found in current session or history.")
 
     st.markdown("---")
 
-    # ── Filters ────────────────────────────────────────────────────────────
+    # ── History scope selector ────────────────────────────────────────────
+    st.markdown("#### 📅 Event History Scope")
+    history_scope = st.radio(
+        "Show events from",
+        ["Current session", "Last 1 hour", "Last 24 hours", "Last 7 days"],
+        label_visibility="collapsed",
+    )
+
+    st.markdown("---")
+
+    # ── Event filter ──────────────────────────────────────────────────────
     st.markdown("#### ⚙️ Event Filter")
     event_filter = st.radio(
         "Show",
@@ -191,10 +347,11 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption(
-        f"Retention: {retention_min} min  |  "
-        f"Refresh: {REFRESH_INTERVAL_S}s  |  "
-        f"Live video: OpenCV window"
+        f"Session retention: {retention_min} min  |  "
+        f"History: {HISTORY_RETENTION_DAYS} days  |  "
+        f"Refresh: {REFRESH_INTERVAL_S}s"
     )
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main area
@@ -203,17 +360,17 @@ with st.sidebar:
 st.markdown("# Multi-Camera Biometric Tracker")
 st.caption("Live video is shown in the OpenCV window. This dashboard shows identity & event data.")
 
-# ── Tracker health banner ─────────────────────────────────────────────────────
+# ── Tracker health banner ──────────────────────────────────────────────────────
 if not file_exists:
     st.markdown(
         '<div class="stale-banner">⚠️  Tracker not running — '
-        'start it with <code>python run_tracker_multi.py</code></div>',
+        'start with <code>python run_tracker_multi.py</code></div>',
         unsafe_allow_html=True,
     )
 elif not tracker_live:
     st.markdown(
         f'<div class="stale-banner">⚠️  Tracker state is {file_age:.0f}s old — '
-        f'it may have stopped.</div>',
+        f'it may have stopped. Showing last known data.</div>',
         unsafe_allow_html=True,
     )
 else:
@@ -223,12 +380,14 @@ else:
         unsafe_allow_html=True,
     )
 
-# ── Top metrics ───────────────────────────────────────────────────────────────
-m1, m2, m3, m4 = st.columns(4)
-m1.metric("Active People",     len(active_people))
-m2.metric("Cameras Online",    f"{online_count} / {len(cameras)}")
-m3.metric("Handoffs (window)", handoff_count)
-m4.metric("Events (window)",   len(all_events))
+# ── Top metrics ────────────────────────────────────────────────────────────────
+total_known = len(history["last_seen"])
+m1, m2, m3, m4, m5 = st.columns(5)
+m1.metric("Active Now",               len(active_people))
+m2.metric("Cameras Online",           f"{online_count} / {len(cameras)}")
+m3.metric("Handoffs (session)",       handoff_count)
+m4.metric("Events (session)",         len(all_events))
+m5.metric("Known Persons (history)",  total_known)
 
 st.markdown("---")
 
@@ -239,12 +398,13 @@ st.markdown("---")
 st.markdown("### 👤 Active People")
 
 if not active_people:
-    st.info("No people in the current retention window." if tracker_live
-            else "Start the tracker to see detections here.")
+    st.info("No people in the current retention window."
+            if tracker_live else
+            "Start the tracker to see detections here.")
 else:
-    cols = st.columns(min(len(active_people), 3))   # up to 3 per row
+    cols = st.columns(min(len(active_people), 3))
     for col, person in zip(
-        (cols * ((len(active_people) // len(cols)) + 1)),   # cycle cols
+        (cols * ((len(active_people) // len(cols)) + 1)),
         sorted(active_people, key=lambda x: x["last_seen"], reverse=True),
     ):
         age      = time.time() - person["last_seen"]
@@ -261,30 +421,78 @@ else:
 st.markdown("---")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Event log
+# Known persons history panel
+# ─────────────────────────────────────────────────────────────────────────────
+
+with st.expander(f"📚 All Known Persons — History ({total_known} people)", expanded=False):
+    if not history["last_seen"]:
+        st.info("No history yet — run the tracker to build history.")
+    else:
+        sorted_persons = sorted(
+            history["last_seen"].items(),
+            key=lambda x: x[1]["timestamp"],
+            reverse=True,
+        )
+        h_cols = st.columns(3)
+        for i, (name, info) in enumerate(sorted_persons):
+            col  = h_cols[i % 3]
+            age  = time.time() - info["timestamp"]
+            when = datetime.fromtimestamp(info["timestamp"]).strftime("%d %b  %H:%M")
+            col.markdown(f"""
+<div class="person-card">
+  <div class="p-name">👤 {name}</div>
+  <div class="p-loc">📍 {info['location']}</div>
+  <div class="p-conf">Confidence: {int(info['confidence'] * 100)}%</div>
+  <div class="p-time">{when}  ({_fmt_age(age)} ago)</div>
+</div>""", unsafe_allow_html=True)
+
+st.markdown("---")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Event log — scope aware
 # ─────────────────────────────────────────────────────────────────────────────
 
 st.markdown("### 📋 Event Log")
 
+# Select events based on scope
+now = time.time()
+if history_scope == "Current session":
+    scope_events = all_events
+elif history_scope == "Last 1 hour":
+    cutoff = now - 3600
+    scope_events = [e for e in history["events"] if e.get("timestamp", 0) >= cutoff]
+elif history_scope == "Last 24 hours":
+    cutoff = now - 86400
+    scope_events = [e for e in history["events"] if e.get("timestamp", 0) >= cutoff]
+else:  # Last 7 days
+    scope_events = history["events"]
+
+# Apply type filter
 if event_filter == "Handoffs only":
-    filtered = [e for e in all_events if e.get("type") == "handoff"]
+    filtered = [e for e in scope_events if e.get("type") == "handoff"]
 elif event_filter == "Sightings only":
-    filtered = [e for e in all_events if e.get("type") == "sighting"]
+    filtered = [e for e in scope_events if e.get("type") == "sighting"]
 else:
-    filtered = all_events
+    filtered = scope_events
 
 events_to_show = list(reversed(filtered))[:MAX_EVENTS_SHOWN]
+st.caption(f"Showing {len(events_to_show)} of {len(filtered)} events "
+           f"({history_scope.lower()})")
 
 if not events_to_show:
-    st.info("No events in the current retention window.")
+    st.info("No events in the selected scope.")
 else:
+    session_cutoff = now - (retention_min * 60)
     for event in events_to_show:
-        ts    = datetime.fromtimestamp(event["timestamp"]).strftime("%H:%M:%S")
+        ts    = datetime.fromtimestamp(event["timestamp"]).strftime("%d %b  %H:%M:%S")
         etype = event.get("type", "")
+        # Dim events outside the active retention window
+        is_old    = event.get("timestamp", now) < session_cutoff
+        old_class = " ev-old" if is_old else ""
 
         if etype == "handoff":
             st.markdown(
-                f'<div class="ev-row ev-handoff">'
+                f'<div class="ev-row ev-handoff{old_class}">'
                 f'🔄 [{ts}] &nbsp;<b>HANDOFF</b>&nbsp; {event["person"]} &nbsp;'
                 f'{event["from_loc"]} → {event["to_loc"]} &nbsp;'
                 f'<span style="color:#6c7086">({event["elapsed_s"]}s gap)</span>'
@@ -294,7 +502,7 @@ else:
         elif etype == "sighting":
             conf_str = f'{int(event.get("confidence", 0) * 100)}%'
             st.markdown(
-                f'<div class="ev-row ev-sighting">'
+                f'<div class="ev-row ev-sighting{old_class}">'
                 f'👁 [{ts}] &nbsp;<b>SIGHTED</b>&nbsp; {event["person"]} &nbsp;'
                 f'@ {event["location"]} &nbsp;'
                 f'<span style="color:#6c7086">conf {conf_str}</span>'
@@ -303,7 +511,7 @@ else:
             )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Auto-refresh countdown
+# Auto-refresh
 # ─────────────────────────────────────────────────────────────────────────────
 
 placeholder = st.empty()
