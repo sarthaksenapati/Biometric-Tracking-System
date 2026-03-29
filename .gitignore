@@ -41,3 +41,5 @@ tracker_state.json
 # 🔹 Temporary files
 temp/
 tmp/
+
+config.py

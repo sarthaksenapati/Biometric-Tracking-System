@@ -5,33 +5,28 @@
 # can read it without needing to load models or open cameras itself.
 #
 # USAGE:
-#   Terminal 1:  python run_tracker_multi.py     ← live video + tracking
-#   Terminal 2:  python -m streamlit run dashboard.py  ← monitoring dashboard
+#   Terminal 1:  python run_tracker_multi.py
+#   Terminal 2:  python -m streamlit run dashboard.py
+#
+# CAMERA CONFIG:
+#   Edit config.py in the project root to change IP, sources, or locations.
+#   You never need to touch this file for camera changes.
 
 import time
 import json
 import threading
 from core.multi_tracker import MultiCameraTracker
+from config import CAMERA_SOURCES, CAMERA_LOCATIONS   # ← all camera config lives here
 
 # ─────────────────────────────────────────────────────────────────────────────
-# CONFIG — edit to match your setup
+# Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-sources = {
-    0: 0,
-    # 1: "http://192.168.220.178:4747/video",
-}
-
-cam_locations = {
-    0: "Main Entrance",
-    1: "Library Gate",
-}
-
-STATE_FILE        = "tracker_state.json"
-STATE_WRITE_INTERVAL = 1.0   # seconds between state file writes
+STATE_WRITE_INTERVAL = 1          # seconds between dashboard state writes
+STATE_FILE           = "tracker_state.json"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# State writer — runs in a background thread, writes JSON for dashboard
+# State writer — background thread, writes JSON for Streamlit dashboard
 # ─────────────────────────────────────────────────────────────────────────────
 
 def state_writer(tracker: MultiCameraTracker, stop_event: threading.Event):
@@ -53,19 +48,26 @@ def state_writer(tracker: MultiCameraTracker, stop_event: threading.Event):
 
         stop_event.wait(STATE_WRITE_INTERVAL)
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
+
+    # Print the active camera config so you can verify on startup
+    print("\n[CONFIG] Camera sources loaded from config.py:")
+    for cam_id, source in CAMERA_SOURCES.items():
+        location = CAMERA_LOCATIONS.get(cam_id, f"Cam{cam_id}")
+        print(f"         Cam{cam_id} → '{location}'  (source={source})")
+    print()
+
     tracker = MultiCameraTracker(
-        cam_sources   = sources,
-        cam_locations = cam_locations,
+        cam_sources   = CAMERA_SOURCES,
+        cam_locations = CAMERA_LOCATIONS,
     )
 
-    # Start background state writer
-    stop_event = threading.Event()
+    # Start background state writer thread
+    stop_event    = threading.Event()
     writer_thread = threading.Thread(
         target=state_writer,
         args=(tracker, stop_event),
@@ -73,7 +75,8 @@ if __name__ == "__main__":
         daemon=True,
     )
     writer_thread.start()
-    print(f"[STATE] 📝 Writing dashboard state to '{STATE_FILE}' every {STATE_WRITE_INTERVAL}s\n")
+    print(f"[STATE] 📝 Writing dashboard state to '{STATE_FILE}' "
+          f"every {STATE_WRITE_INTERVAL}s\n")
 
     try:
         tracker.run()   # blocking — shows OpenCV window, press ESC to quit
