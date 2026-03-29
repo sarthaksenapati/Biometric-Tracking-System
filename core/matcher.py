@@ -100,6 +100,18 @@ class Matcher:
         print(f"[DB LOAD] Dynamic threshold for {len(self.database)} people: "
               f"{self._dynamic_threshold():.2f}\n")
 
+    def reload(self):
+        """
+        Reload embeddings_db/ without restarting the tracker.
+        Called automatically by AutoEnroller after a new person is promoted,
+        so they are immediately recognised by the matcher as a known user.
+        """
+        print(f"[Matcher] 🔄 Reloading database...")
+        self.load_database()
+        print(f"[Matcher] ✅ Reload complete — "
+              f"{len(self.database)} persons now in DB: "
+              f"{list(self.database.keys())}")
+
     def identify(self, face_emb=None, body_emb=None, gait_emb=None):
         if not self.database:
             return "Unknown", 0.0
