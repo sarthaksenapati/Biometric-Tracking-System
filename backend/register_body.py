@@ -6,7 +6,7 @@ from models.reid_model import ReIDModel
 from models.detector import PersonDetector
 from utils.embeddings import save_embedding
 
-DROIDCAM_URL = "http://192.168.0.183:4747/video"
+DROIDCAM_URL = "http://192.168.220.178:4747/video"
 
 
 def select_camera():

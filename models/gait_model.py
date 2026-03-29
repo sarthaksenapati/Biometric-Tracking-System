@@ -1,42 +1,38 @@
-# models/gait_model.py
+# models/gait_model.py — GPU-accelerated GEI (keeps your approach, adds GPU)
 
 import cv2
+import torch
 import numpy as np
 
 
 class GaitModel:
     def __init__(self):
-        pass
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"[Gait] ✅  GEI gait model on {self.device}")
 
-    def get_silhouette(self, frame):
+    def get_silhouette(self, frame: np.ndarray) -> np.ndarray | None:
+        if frame is None or frame.size == 0:
+            return None
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
         _, thresh = cv2.threshold(blur, 50, 255, cv2.THRESH_BINARY)
-        silhouette = cv2.resize(thresh, (64, 128))
-        return silhouette
+        return cv2.resize(thresh, (64, 128))
 
-    def extract_gait_embedding(self, frame_sequence):
+    def get_embedding(self, frame_sequence: list) -> np.ndarray | None:
         silhouettes = []
         for frame in frame_sequence:
-            if frame is None or frame.size == 0:
-                continue
             sil = self.get_silhouette(frame)
-            silhouettes.append(sil)
+            if sil is not None:
+                silhouettes.append(sil)
 
-        if len(silhouettes) == 0:
+        if not silhouettes:
             return None
 
-        silhouettes = np.array(silhouettes)
-        avg_silhouette = np.mean(silhouettes, axis=0)
-        avg_silhouette = avg_silhouette / 255.0
-        embedding = avg_silhouette.flatten()
-
-        # normalize so cosine similarity works correctly
-        norm = np.linalg.norm(embedding)
-        if norm == 0:
+        # Stack → GPU tensor → mean (GEI) → normalize
+        arr    = np.stack(silhouettes).astype(np.float32) / 255.0   # [N, 128, 64]
+        tensor = torch.from_numpy(arr).to(self.device)              # GPU
+        gei    = tensor.mean(dim=0).flatten()                        # [8192]  GPU mean
+        norm   = torch.norm(gei)
+        if norm < 1e-8:
             return None
-        return embedding / norm
-
-    # Alias so tracker can call get_embedding consistently
-    def get_embedding(self, frame_sequence):
-        return self.extract_gait_embedding(frame_sequence)
+        return (gei / norm).cpu().numpy().astype(np.float32)        # back to numpy

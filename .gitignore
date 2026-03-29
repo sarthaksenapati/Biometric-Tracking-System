@@ -34,6 +34,10 @@ Thumbs.db
 # 🔹 Jupyter checkpoints
 .ipynb_checkpoints/
 
+
+tracker_state.json
+
+
 # 🔹 Temporary files
 temp/
 tmp/
