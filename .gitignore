@@ -43,3 +43,7 @@ temp/
 tmp/
 
 config.py
+
+tracker_history.json
+unknown_persons.json
+tracker_state.json
