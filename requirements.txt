@@ -25,3 +25,25 @@ uvicorn
 # 🔹 Utilities & Visualization
 matplotlib
 pillow
+
+# 🔹 Core Deep Learning (GPU-compatible if CUDA torch installed separately)
+torch
+torchvision
+
+# 🔹 Computer Vision
+ultralytics
+opencv-python
+
+# 🔹 Data handling
+numpy
+
+# 🔹 Face Recognition
+deepface
+onnxruntime  # For InsightFace support
+
+# 🔹 Backend API
+fastapi
+uvicorn
+
+# 🔹 Dashboard
+streamlit
