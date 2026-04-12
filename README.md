@@ -418,7 +418,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👨‍💻 Author
 
-**Prityanshu Yadav**  
+**Sarthak Senapati**  
 B.Tech Final Year Project  
 Department of Computer Science & Engineering
 
@@ -434,9 +434,9 @@ Department of Computer Science & Engineering
 ## 📞 Contact
 
 For questions or collaboration:
-- **Email**: prityanshu.yadav@email.com
-- **GitHub**: [@prityanshu-yadav](https://github.com/prityanshu-yadav)
-- **LinkedIn**: [Prityanshu Yadav](https://linkedin.com/in/prityanshu-yadav)
+- **Email**: sarthaksenapati566@gmail.com
+- **GitHub**: [@sarthak-senapati](https://github.com/sarthaksenapati)
+- **LinkedIn**: [Sarthak Senapati](https://www.linkedin.com/in/sarthaksenapati/)
 
 ---
 
