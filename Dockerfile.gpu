@@ -1,0 +1,58 @@
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+
+# Prevent Python from writing pyc files and buffering stdout
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Install Python 3.10
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.10 \
+    python3-pip \
+    python3.10-venv \
+    git \
+    wget \
+    curl \
+    build-essential \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    ffmpeg \
+    libcurl4-openssl-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Make python3.10 the default python
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 && \
+    update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+# Set work directory
+WORKDIR /app
+
+# Copy requirements first (for better layer caching)
+COPY requirements.txt .
+
+# Install Python dependencies with GPU support
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118 && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Install insightface explicitly
+RUN pip install --no-cache-dir insightface
+
+# Copy project files
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p embeddings_db unknown_persons_emb datasets
+
+# Expose ports
+EXPOSE 8000 8501
+
+# Set default command
+CMD ["bash"]

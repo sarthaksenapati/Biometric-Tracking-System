@@ -1,49 +1,32 @@
-# 🔹 Core Deep Learning (GPU-compatible if CUDA torch installed separately)
+# Core Deep Learning
 torch
 torchvision
 torchaudio
 
-# 🔹 Computer Vision
+# Computer Vision
 ultralytics
 opencv-python
 
-# 🔹 Data handling
+# Data handling
 numpy
 pandas
 scikit-learn
 
-# 🔹 Face Recognition
+# Face Recognition
 deepface
+insightface
+onnxruntime
 
-# 🔹 Person Re-Identification
+# Person Re-Identification
 torchreid
 
-# 🔹 Backend API
+# Backend API
 fastapi
 uvicorn
 
-# 🔹 Utilities & Visualization
+# Dashboard
+streamlit
+
+# Utilities & Visualization
 matplotlib
 pillow
-
-# 🔹 Core Deep Learning (GPU-compatible if CUDA torch installed separately)
-torch
-torchvision
-
-# 🔹 Computer Vision
-ultralytics
-opencv-python
-
-# 🔹 Data handling
-numpy
-
-# 🔹 Face Recognition
-deepface
-onnxruntime  # For InsightFace support
-
-# 🔹 Backend API
-fastapi
-uvicorn
-
-# 🔹 Dashboard
-streamlit

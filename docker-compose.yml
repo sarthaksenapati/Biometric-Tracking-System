@@ -1,0 +1,74 @@
+version: "3.8"
+
+services:
+  # ── Backend API (FastAPI) ──────────────────────────────────────────────
+  backend:
+    build: .
+    container_name: biometric-backend
+    command: uvicorn backend.app:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./embeddings_db:/app/embeddings_db
+      - ./unknown_persons_emb:/app/unknown_persons_emb
+      - ./datasets:/app/datasets
+      - ./core:/app/core
+      - ./models:/app/models
+      - ./utils:/app/utils
+      - ./backend:/app/backend
+    environment:
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    networks:
+      - biometric-net
+
+  # ── Dashboard (Streamlit) ───────────────────────────────────────────────
+  dashboard:
+    build: .
+    container_name: biometric-dashboard
+    command: streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./embeddings_db:/app/embeddings_db
+      - ./unknown_persons_emb:/app/unknown_persons_emb
+      - ./datasets:/app/datasets
+      - ./core:/app/core
+      - ./models:/app/models
+      - ./utils:/app/utils
+      - ./dashboard.py:/app/dashboard.py
+    environment:
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    networks:
+      - biometric-net
+    depends_on:
+      - backend
+
+  # ── Tracker (Single Camera) ─────────────────────────────────────────────
+  tracker:
+    build: .
+    container_name: biometric-tracker
+    command: python run_tracker.py
+    volumes:
+      - ./embeddings_db:/app/embeddings_db
+      - ./unknown_persons_emb:/app/unknown_persons_emb
+      - ./datasets:/app/datasets
+      - ./core:/app/core
+      - ./models:/app/models
+      - ./utils:/app/utils
+      - ./iot_stream:/app/iot_stream
+      - ./run_tracker.py:/app/run_tracker.py
+    environment:
+      - PYTHONPATH=/app
+    network_mode: "host"  # For camera access
+    restart: unless-stopped
+    privileged: true  # For camera device access
+    devices:
+      - /dev/video0:/dev/video0  # Adjust for your camera device
+    depends_on:
+      - backend
+
+networks:
+  biometric-net:
+    driver: bridge

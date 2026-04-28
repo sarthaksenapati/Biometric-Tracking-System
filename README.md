@@ -184,6 +184,131 @@ The system provides **real-time tracking** across multiple cameras, **fusion-bas
 
 ---
 
+## 🐳 Docker Deployment
+
+### Prerequisites
+- Docker installed
+- Docker Compose installed
+- (Optional) NVIDIA Container Toolkit for GPU support
+
+### Quick Start with Docker
+
+1. **Clone the Repository**
+   ```bash
+   git clone https://github.com/your-username/biometric-tracking-system.git
+   cd biometric-tracking-system
+   ```
+
+2. **CPU Version (Default)**
+   ```bash
+   # Build and start all services
+   docker-compose up --build
+
+   # Run in background
+   docker-compose up -d --build
+
+   # View logs
+   docker-compose logs -f
+
+   # Stop services
+   docker-compose down
+   ```
+
+3. **GPU Version (Requires NVIDIA Docker)**
+   ```bash
+   # Build with GPU Dockerfile
+   docker build -f Dockerfile.gpu -t biometric-tracking-gpu .
+
+   # Modify docker-compose.yml to use the GPU image, or run manually:
+   docker run --gpus all -it biometric-tracking-gpu bash
+   ```
+
+### Services
+
+| Service | Description | Port |
+|----------|-------------|------|
+| **backend** | FastAPI backend for recognition API | 8000 |
+| **dashboard** | Streamlit web dashboard | 8501 |
+| **tracker** | Real-time tracking service | (host network) |
+
+### Volumes
+The following directories are mounted as volumes for persistence:
+- `embeddings_db/` - Stored person embeddings
+- `unknown_persons_emb/` - Unknown person embeddings
+- `datasets/` - Training/validation data
+
+### Accessing the Services
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+- **Dashboard**: http://localhost:8501
+
+---
+
+## 🌐 Deploy to Render (Cloud Deployment)
+
+### Prerequisites
+- GitHub repository with your code
+- Render.com account (free tier available)
+
+### Option 1: One-Click Deploy (Easiest)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/your-username/biometric-tracking-system)
+
+### Option 2: Manual Setup via Render Dashboard
+
+1. **Push code to GitHub**
+   ```bash
+   git add .
+   git commit -m "Add Docker and Render deployment configs"
+   git push origin main
+   ```
+
+2. **Deploy Backend API**
+   - Go to [Render Dashboard](https://dashboard.render.com)
+   - Click "New +" → "Web Service"
+   - Connect your GitHub repository
+   - Configure:
+     - **Name**: `biometric-backend`
+     - **Environment**: `Docker`
+     - **Branch**: `main`
+     - **Plan**: `Free`
+   - Add Environment Variables:
+     ```
+     PYTHONPATH=/app
+     ```
+   - Click "Create Web Service"
+
+3. **Deploy Dashboard**
+   - Repeat the same steps for the dashboard
+   - **Name**: `biometric-dashboard`
+   - Add Environment Variables:
+     ```
+     PYTHONPATH=/app
+     BACKEND_URL=https://biometric-backend.onrender.com
+     ```
+   - Click "Create Web Service"
+
+### Option 3: Using render.yaml (Infrastructure as Code)
+
+1. Push your code with the `render.yaml` file to GitHub
+2. In Render Dashboard, click "New +" → "Blueprint"
+3. Connect your repository
+4. Render will automatically detect `render.yaml` and create both services
+
+### Access Your Deployed Services
+
+| Service | URL |
+|---------|-----|
+| **Backend API** | `https://biometric-backend.onrender.com` |
+| **API Docs** | `https://biometric-backend.onrender.com/docs` |
+| **Dashboard** | `https://biometric-dashboard.onrender.com` |
+
+> **Note**: The free tier spins down after 15 minutes of inactivity. The first request after inactivity may take 30-60 seconds.
+
+> **Note**: Camera-based tracking (`run_tracker.py`) cannot be deployed to the cloud — it requires local camera access. Run the tracker locally using Docker.
+
+---
+
 ## ▶️ Usage
 
 ### Quick Start
@@ -416,9 +541,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 👨‍💻 Author
+## 👨‍💻 Authors
 
 **Prityanshu Yadav**  
+**Sarthak Senapati**  
 B.Tech Final Year Project  
 Department of Computer Science & Engineering
 
@@ -433,10 +559,15 @@ Department of Computer Science & Engineering
 
 ## 📞 Contact
 
-For questions or collaboration:
+**Prityanshu Yadav**
 - **Email**: prityanshu.yadav@email.com
 - **GitHub**: [@prityanshu-yadav](https://github.com/prityanshu-yadav)
 - **LinkedIn**: [Prityanshu Yadav](https://linkedin.com/in/prityanshu-yadav)
+
+**Sarthak Senapati**
+- **Email**: sarthaksenapati566@gmail.com
+- **GitHub**: [@sarthaksenapati](https://github.com/sarthaksenapati)
+- **LinkedIn**: [Sarthak Senapati](https://www.linkedin.com/in/sarthaksenapati/)
 
 ---
 
@@ -559,9 +690,9 @@ This project demonstrates concepts from Computer Vision, Machine Learning, Deep 
 
 ---
 
-## 👨‍💻 Author
+## 👨‍💻 Authors
 
-**Prityanshu Yadav** — B.Tech Final Year Project
+**Prityanshu Yadav**, **Sarthak Senapati** — B.Tech Final Year Project
 
 ---
 

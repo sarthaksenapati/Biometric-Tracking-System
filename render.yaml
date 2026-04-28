@@ -1,0 +1,36 @@
+services:
+  # ── Backend API (FastAPI) ──────────────────────────────────────────
+  - type: web
+    name: biometric-backend
+    env: docker
+    plan: free
+    branch: main
+    numInstances: 1
+    healthCheckPath: /
+    envVars:
+      - key: PYTHONPATH
+        value: /app
+      - key: PORT
+        value: "8000"
+    preDeployCommand: ""
+    buildCommand: ""
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+
+  # ── Dashboard (Streamlit) ───────────────────────────────────────────
+  - type: web
+    name: biometric-dashboard
+    env: docker
+    plan: free
+    branch: main
+    numInstances: 1
+    healthCheckPath: /
+    envVars:
+      - key: PYTHONPATH
+        value: /app
+      - key: PORT
+        value: "8501"
+      - key: BACKEND_URL
+        value: https://biometric-backend.onrender.com
+    preDeployCommand: ""
+    buildCommand: ""
+    startCommand: streamlit run dashboard.py --server.port $PORT --server.address 0.0.0.0 --server.headless true --server.enableCORS false --server.enableXsrfProtection false
