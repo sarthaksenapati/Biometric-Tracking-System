@@ -681,21 +681,58 @@ class CameraReader(threading.Thread):
         self._lock  = threading.Lock()
         self._stop  = threading.Event()
         self.online = cap.isOpened()
+        self._prev_online = self.online
 
     def run(self):
         while not self._stop.is_set():
             if not self.cap or not self.cap.isOpened():
                 self.online = False
+                self._check_status_change()
                 time.sleep(0.1)
                 continue
             ret, frame = self.cap.read()
             if not ret or frame is None:
                 self.online = False
+                self._check_status_change()
                 time.sleep(0.05)
                 continue
             self.online = True
+            self._check_status_change()
             with self._lock:
                 self._frame = frame
+
+    def _check_status_change(self):
+        if self.online != self._prev_online:
+            try:
+                from monitoring.metrics import update_camera_status
+                update_camera_status(self.cam_id, self.online)
+            except Exception:
+                pass
+
+            if not self.online:
+                try:
+                    from monitoring.alerts import trigger_alert
+                    trigger_alert(
+                        "camera_offline",
+                        f"Camera {self.cam_id} ({self.loc_name}) went offline",
+                        severity="error",
+                        camera_id=self.cam_id,
+                    )
+                except Exception:
+                    pass
+            else:
+                try:
+                    from monitoring.alerts import trigger_alert
+                    trigger_alert(
+                        "camera_offline",
+                        f"Camera {self.cam_id} ({self.loc_name}) is back online",
+                        severity="info",
+                        camera_id=self.cam_id,
+                    )
+                except Exception:
+                    pass
+
+            self._prev_online = self.online
 
     def get_latest(self) -> np.ndarray | None:
         with self._lock:
@@ -725,12 +762,21 @@ class MultiCameraTracker:
 
     def __init__(self, cam_sources: dict, cam_locations: dict = None):
         print("\n[MULTI] Loading shared models...")
-        self.detector   = PersonDetector()
-        self.face_model = FaceRecognizer()
-        self.reid_model = ReIDModel()
-        self.gait_model = GaitModel()
-        self.matcher    = Matcher()
+
+        with ModelLoadTimer("detector"):
+            self.detector   = PersonDetector()
+        with ModelLoadTimer("face_model"):
+            self.face_model = FaceRecognizer()
+        with ModelLoadTimer("reid_model"):
+            self.reid_model = ReIDModel()
+        with ModelLoadTimer("gait_model"):
+            self.gait_model = GaitModel()
+        with ModelLoadTimer("matcher"):
+            self.matcher    = Matcher()
+
         print("[MULTI] Models ready.\n")
+
+        self._fps_counters: dict = {}  # cam_id → (last_time, frame_count)
 
         self.cam_sources   = cam_sources
         self.cam_locations = cam_locations or {
@@ -900,9 +946,41 @@ class MultiCameraTracker:
     # ── Core: process one frame ───────────────────────────────────────────────
 
     def process_frame(self, frame, cam_id) -> list:
+        # FPS tracking
+        now = time.time()
+        if cam_id not in self._fps_counters:
+            self._fps_counters[cam_id] = {"last_time": now, "frame_count": 0}
+        info = self._fps_counters[cam_id]
+        info["frame_count"] += 1
+        elapsed = now - info["last_time"]
+        if elapsed >= 1.0:
+            fps = info["frame_count"] / elapsed
+            try:
+                from monitoring.metrics import update_fps
+                update_fps(cam_id, fps)
+            except Exception:
+                pass
+            info["last_time"] = now
+            info["frame_count"] = 0
+
+        # Record frame processed
+        try:
+            from monitoring.metrics import record_frame_processed
+            record_frame_processed(cam_id)
+        except Exception:
+            pass
+
         detections = self.detector.detect(frame)
         results    = []
         loc        = self._loc(cam_id)
+
+        # Record detections
+        for det in detections:
+            try:
+                from monitoring.metrics import record_detection
+                record_detection(cam_id)
+            except Exception:
+                pass
 
         for idx, det in enumerate(detections):
             track_id        = det.get("track_id") or idx

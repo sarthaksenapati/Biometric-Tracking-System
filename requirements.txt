@@ -33,6 +33,10 @@ redis
 # Dashboard
 streamlit
 
+# Monitoring
+prometheus-client
+prometheus-fastapi-instrumentator
+
 # Utilities & Visualization
 matplotlib
 pillow

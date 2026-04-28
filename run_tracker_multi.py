@@ -15,8 +15,14 @@
 import time
 import json
 import threading
+from prometheus_client import start_http_server
 from core.multi_tracker import MultiCameraTracker
 from config import CAMERA_SOURCES, CAMERA_LOCATIONS   # ← all camera config lives here
+
+# Start Prometheus metrics HTTP server
+METRICS_PORT = 8001
+start_http_server(METRICS_PORT)
+print(f"[METRICS] Prometheus metrics exposed on port {METRICS_PORT}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants

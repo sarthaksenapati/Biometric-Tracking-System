@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "biometric-backend"
+    static_configs:
+      - targets: ["backend:8000"]
+    scrape_interval: 5s
+    metrics_path: /metrics
+
+  - job_name: "biometric-tracker"
+    static_configs:
+      - targets: ["tracker:8000"]
+    scrape_interval: 5s
+    metrics_path: /metrics

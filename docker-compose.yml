@@ -16,8 +16,10 @@ services:
       - ./models:/app/models
       - ./utils:/app/utils
       - ./backend:/app/backend
+      - ./monitoring:/app/monitoring
     environment:
       - PYTHONPATH=/app
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}
     restart: unless-stopped
     networks:
       - biometric-net
@@ -59,6 +61,7 @@ services:
       - ./utils:/app/utils
       - ./iot_stream:/app/iot_stream
       - ./run_tracker.py:/app/run_tracker.py
+      - ./monitoring:/app/monitoring
     environment:
       - PYTHONPATH=/app
     network_mode: "host"  # For camera access
@@ -69,6 +72,50 @@ services:
     depends_on:
       - backend
 
+  # ── Prometheus ──────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: biometric-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - biometric-net
+
+  # ── Grafana ─────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: biometric-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    restart: unless-stopped
+    networks:
+      - biometric-net
+    depends_on:
+      - prometheus
+
 networks:
   biometric-net:
     driver: bridge
+
+volumes:
+  prometheus_data:
+  grafana_data:

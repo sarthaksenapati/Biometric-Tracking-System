@@ -1,7 +1,9 @@
 # core/tracker.py
 
 import cv2
+import time
 import numpy as np
+import threading
 from collections import deque
 
 from models.detector import PersonDetector
@@ -9,10 +11,21 @@ from models.face_model import FaceRecognizer
 from models.reid_model import ReIDModel
 from models.gait_model import GaitModel
 from core.matcher import Matcher
+from monitoring.metrics import (
+    update_fps,
+    record_detection,
+    record_identification,
+    record_frame_processed,
+    observe_matching_latency,
+    update_camera_status,
+)
+from monitoring.alerts import trigger_alert, get_alert_manager
 
 
 class LiveTracker:
-    def __init__(self):
+    def __init__(self, cam_id=0, source=0):
+        self.cam_id = str(cam_id)
+        self.source = source
         self.detector  = PersonDetector()
         self.face_model = FaceRecognizer()
         self.reid_model = ReIDModel()
@@ -26,6 +39,15 @@ class LiveTracker:
         self.GAIT_BUFFER_SIZE = 10
         self.PRED_BUFFER_SIZE = 7
 
+        # FPS tracking
+        self._fps_counter = 0
+        self._fps_time = time.time()
+        self._current_fps = 0.0
+
+        # Camera health
+        self._camera_offline = False
+        update_camera_status(self.cam_id, True)
+
     # ── Buffer helpers ──────────────────────────────────────────────────────
     def _gait_buf(self, tid):
         if tid not in self.gait_buffers:
@@ -37,13 +59,28 @@ class LiveTracker:
             self.pred_buffers[tid] = deque(maxlen=self.PRED_BUFFER_SIZE)
         return self.pred_buffers[tid]
 
+    # ── FPS calculation ────────────────────────────────────────────────────
+    def _update_fps(self):
+        self._fps_counter += 1
+        now = time.time()
+        elapsed = now - self._fps_time
+        if elapsed >= 1.0:
+            self._current_fps = self._fps_counter / elapsed
+            self._fps_counter = 0
+            self._fps_time = now
+            update_fps(self.cam_id, self._current_fps)
+
     # ── Main ────────────────────────────────────────────────────────────────
     def process_frame(self, frame):
+        self._update_fps()
+        record_frame_processed(self.cam_id)
+
         detections = self.detector.detect(frame)
         results    = []
 
         for idx, det in enumerate(detections):
             track_id = det.get("track_id") or idx
+            record_detection(self.cam_id)
 
             x1, y1, x2, y2 = det["bbox"]
             h, w = frame.shape[:2]
@@ -62,7 +99,6 @@ class LiveTracker:
             crop_h, crop_w = person_crop.shape[:2]
 
             # ── Face ─────────────────────────────────────────────────────
-            # face_model now internally rejects crops that are too small
             face_emb = None
             try:
                 face_emb = self.face_model.get_embedding(person_crop)
@@ -87,20 +123,15 @@ class LiveTracker:
                 except Exception as e:
                     print(f"[TRACKER] gait_model error track {track_id}: {e}")
 
-            # ── Debug ─────────────────────────────────────────────────────
-            print(
-                f"[TRACKER] track={track_id} crop=({crop_w}x{crop_h}) | "
-                f"face={'✅' if face_emb is not None else '❌ (too small or failed)'} | "
-                f"body={'✅' if body_emb is not None else '❌'} | "
-                f"gait={'✅' if gait_emb is not None else f'buffering ({len(gait_buf)}/5)'}"
-            )
-
             # ── Match ─────────────────────────────────────────────────────
             name, score = self.matcher.identify(
                 face_emb=face_emb,
                 body_emb=body_emb,
                 gait_emb=gait_emb
             )
+
+            if name != "Unknown":
+                record_identification(self.cam_id)
 
             # ── Smooth predictions ────────────────────────────────────────
             pred_buf = self._pred_buf(track_id)
@@ -134,20 +165,62 @@ class LiveTracker:
         return frame
 
     # ── Run loop ─────────────────────────────────────────────────────────────
-    def run(self, source=0):
-        cap = cv2.VideoCapture(source)
+    def run(self, source=None):
+        src = source if source is not None else self.source
+        cap = cv2.VideoCapture(src)
 
         if not cap.isOpened():
-            print("❌ Could not open camera/source")
+            print(f"❌ Could not open camera/source {src}")
+            update_camera_status(self.cam_id, False)
+            trigger_alert(
+                "camera_offline",
+                f"Camera {self.cam_id} could not be opened",
+                severity="error",
+                camera_id=self.cam_id,
+                details={"source": str(src)}
+            )
             return
 
-        print("✅ Tracker running — press ESC to quit\n")
+        print(f"✅ Tracker running on camera {self.cam_id} — press ESC to quit\n")
+        update_camera_status(self.cam_id, True)
 
         while True:
             ret, frame = cap.read()
             if not ret:
-                print("⚠️  Frame read failed")
-                break
+                if not self._camera_offline:
+                    print(f"⚠️  Camera {self.cam_id} went offline")
+                    self._camera_offline = True
+                    update_camera_status(self.cam_id, False)
+                    trigger_alert(
+                        "camera_offline",
+                        f"Camera {self.cam_id} stopped sending frames",
+                        severity="error",
+                        camera_id=self.cam_id
+                    )
+                time.sleep(1)
+                cap = cv2.VideoCapture(src)
+                if cap.isOpened():
+                    print(f"✅ Camera {self.cam_id} reconnected")
+                    self._camera_offline = False
+                    update_camera_status(self.cam_id, True)
+                    trigger_alert(
+                        "camera_online",
+                        f"Camera {self.cam_id} is back online",
+                        severity="info",
+                        camera_id=self.cam_id
+                    )
+                continue
+
+            if self._camera_offline:
+                print(f"✅ Camera {self.cam_id} reconnected")
+                self._camera_offline = False
+                update_camera_status(self.cam_id, True)
+                trigger_alert(
+                    "camera_online",
+                    f"Camera {self.cam_id} is back online",
+                    severity="info",
+                    camera_id=self.cam_id
+                )
 
             results = self.process_frame(frame)
             frame   = self.draw_results(frame, results)
@@ -157,5 +230,6 @@ class LiveTracker:
             if cv2.waitKey(1) & 0xFF == 27:
                 break
 
+        update_camera_status(self.cam_id, False)
         cap.release()
         cv2.destroyAllWindows()
