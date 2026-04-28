@@ -10,8 +10,6 @@ services:
     envVars:
       - key: PYTHONPATH
         value: /app
-      - key: PORT
-        value: "8000"
 
   # ── Dashboard (Streamlit) ───────────────────────────────────────────
   - type: web
@@ -19,12 +17,10 @@ services:
     env: docker
     plan: free
     branch: main
-    healthCheckPath: /
+    healthCheckPath: /_stcore/health
     dockerfilePath: ./Dockerfile.dashboard
     envVars:
       - key: PYTHONPATH
         value: /app
-      - key: PORT
-        value: "8501"
       - key: BACKEND_URL
         value: https://biometric-backend.onrender.com
