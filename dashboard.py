@@ -101,13 +101,32 @@ def load_state() -> dict | None:
 
 def load_history() -> dict:
     """
-    Load persistent history file.
-    Structure:
-    {
-      "last_seen": { "PersonName": {"location": ..., "timestamp": ..., "confidence": ...} },
-      "events":    [ {sighting/handoff event dicts} ... ]
-    }
+    Load persistent history.
+    Tries Redis first, falls back to tracker_history.json.
     """
+    # Try Redis first
+    try:
+        from cache.redis_cache import REDIS_AVAILABLE, get_detection_history
+        if REDIS_AVAILABLE:
+            events = get_detection_history(limit=10000)
+            if events:
+                # Rebuild last_seen from events
+                last_seen = {}
+                for e in reversed(events):
+                    if e.get("type") == "sighting" and "person" in e:
+                        name = e["person"]
+                        if name not in last_seen:
+                            last_seen[name] = {
+                                "location":   e.get("location", ""),
+                                "timestamp":  e.get("timestamp", 0),
+                                "confidence": e.get("confidence", 0),
+                                "cam_id":     e.get("cam_id"),
+                            }
+                return {"last_seen": last_seen, "events": events}
+    except Exception:
+        pass
+
+    # Fallback to JSON file
     if not os.path.exists(HISTORY_FILE):
         return {"last_seen": {}, "events": []}
     try:

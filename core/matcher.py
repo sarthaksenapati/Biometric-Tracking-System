@@ -69,6 +69,36 @@ class Matcher:
     def load_database(self):
         self.database = {}
 
+        # Try database first
+        try:
+            from database.db import DB_AVAILABLE, load_all_persons
+            if DB_AVAILABLE:
+                result = load_all_persons()
+                if result is not None:
+                    self.database = result
+                    print(f"\n[DB LOAD] Loaded from DB: {list(self.database.keys())}")
+                    print(f"[DB LOAD] Dynamic threshold for {len(self.database)} people: "
+                          f"{self._dynamic_threshold():.2f}\n")
+                    self._cache_to_redis()
+                    return
+        except Exception as e:
+            print(f"[DB LOAD] DB load failed ({e}), falling back to .npy")
+
+        # Try Redis cache
+        try:
+            from cache.redis_cache import REDIS_AVAILABLE, get_cached_embeddings
+            if REDIS_AVAILABLE:
+                cached = get_cached_embeddings("all")
+                if cached is not None:
+                    self.database = cached
+                    print(f"\n[DB LOAD] Loaded from Redis cache: {list(self.database.keys())}")
+                    print(f"[DB LOAD] Dynamic threshold for {len(self.database)} people: "
+                          f"{self._dynamic_threshold():.2f}\n")
+                    return
+        except Exception as e:
+            print(f"[DB LOAD] Redis cache failed ({e}), falling back to .npy")
+
+        # Fallback to .npy files
         if not os.path.exists(self.db_path):
             print(f"[DB LOAD] ⚠️  Folder not found: {self.db_path}")
             return
@@ -91,7 +121,6 @@ class Matcher:
                 if name not in self.database:
                     self.database[name] = {}
                 self.database[name][modality] = emb
-                # (512,) = single exemplar, (N, 512) = multi-exemplar
                 print(f"[DB LOAD] ✅  {name} → {modality}  shape={emb.shape}")
             except Exception as e:
                 print(f"[DB LOAD] ❌  {file}: {e}")
@@ -99,6 +128,18 @@ class Matcher:
         print(f"\n[DB LOAD] Loaded: {list(self.database.keys())}")
         print(f"[DB LOAD] Dynamic threshold for {len(self.database)} people: "
               f"{self._dynamic_threshold():.2f}\n")
+        self._cache_to_redis()
+
+    def _cache_to_redis(self):
+        """Cache loaded embeddings in Redis for faster subsequent loads."""
+        try:
+            from cache.redis_cache import REDIS_AVAILABLE, set_cached_embeddings
+            if not REDIS_AVAILABLE or not self.database:
+                return
+            set_cached_embeddings("all", self.database)
+            print("[REDIS] Embeddings cached")
+        except Exception as e:
+            print(f"[REDIS] _cache_to_redis failed: {e}")
 
     def reload(self):
         """
@@ -106,6 +147,13 @@ class Matcher:
         Called automatically by AutoEnroller after a new person is promoted,
         so they are immediately recognised by the matcher as a known user.
         """
+        # Invalidate Redis cache before reloading
+        try:
+            from cache.redis_cache import invalidate_embeddings_cache
+            invalidate_embeddings_cache()
+        except Exception as e:
+            print(f"[Matcher] Redis invalidation failed: {e}")
+
         print(f"[Matcher] 🔄 Reloading database...")
         self.load_database()
         print(f"[Matcher] ✅ Reload complete — "

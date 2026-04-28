@@ -10,6 +10,10 @@ services:
     envVars:
       - key: PYTHONPATH
         value: /app
+      - key: DATABASE_URL
+        value: https://dashboard.render.com/postgres
+      - key: REDIS_URL
+        value: https://dashboard.render.com/redis
 
   # ── Dashboard (Streamlit) ───────────────────────────────────────────
   - type: web
@@ -24,3 +28,7 @@ services:
         value: /app
       - key: BACKEND_URL
         value: https://biometric-backend.onrender.com
+      - key: DATABASE_URL
+        value: https://dashboard.render.com/postgres
+      - key: REDIS_URL
+        value: https://dashboard.render.com/redis

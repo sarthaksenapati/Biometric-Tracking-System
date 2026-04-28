@@ -24,6 +24,12 @@ torchreid
 fastapi
 uvicorn
 
+# Database
+psycopg2-binary
+
+# Redis
+redis
+
 # Dashboard
 streamlit
 

@@ -65,6 +65,31 @@ class SharedIdentityCache:
     def __init__(self):
         self._store: dict = {}
         self._lock  = threading.Lock()
+        self._use_redis = False
+
+        # Try to load from Redis on startup
+        try:
+            from cache.redis_cache import REDIS_AVAILABLE, get_shared_identity_cache
+            if REDIS_AVAILABLE:
+                cached = get_shared_identity_cache()
+                if cached:
+                    self._store = cached
+                    self._use_redis = True
+                    print(f"[CACHE] Loaded {len(self._store)} entries from Redis")
+                else:
+                    self._use_redis = True
+        except Exception:
+            pass
+
+    def _sync_to_redis(self):
+        """Sync in-memory store to Redis."""
+        if not self._use_redis:
+            return
+        try:
+            from cache.redis_cache import set_shared_identity_cache
+            set_shared_identity_cache(self._store)
+        except Exception as e:
+            print(f"[CACHE] Redis sync failed: {e}")
 
     def deposit(self, name, cam_id, location, score,
                 face_emb, body_emb, gait_emb, cloth_hist):
@@ -88,6 +113,7 @@ class SharedIdentityCache:
                           if v is not None]
                 print(f"[CACHE] 💾  '{name}' updated from {location} "
                       f"(score={score:.3f}, stored={stored})")
+                self._sync_to_redis()
 
     def query(self, face_emb, body_emb, gait_emb, cloth_hist):
         with self._lock:
@@ -133,6 +159,12 @@ class SharedIdentityCache:
     def clear(self):
         with self._lock:
             self._store.clear()
+        if self._use_redis:
+            try:
+                from cache.redis_cache import clear_shared_identity_cache
+                clear_shared_identity_cache()
+            except Exception as e:
+                print(f"[CACHE] Redis clear failed: {e}")
         print("[CACHE] 🧹 Cleared")
 
     def summary(self) -> str:
@@ -278,6 +310,15 @@ class AutoEnroller:
         return True
 
     def _rename_embedding_files(self, old_name: str, new_name: str):
+        # Try database rename first
+        try:
+            from database.db import DB_AVAILABLE, rename_person
+            if DB_AVAILABLE:
+                rename_person(old_name, new_name)
+        except Exception as e:
+            print(f"[AutoEnroller] DB rename failed ({e}), trying .npy files")
+
+        # Fallback to .npy file rename
         for kind in ("face", "body", "gait"):
             old_path = os.path.join("embeddings_db", f"{old_name}_{kind}.npy")
             new_path = os.path.join("embeddings_db", f"{new_name}_{kind}.npy")
@@ -536,7 +577,7 @@ class GlobalIdentityManager:
                     prev_loc = self._loc(prev["cam_id"])
                     print(f"[HANDOFF] {person_name}  "
                           f"{prev_loc} → {location}  ({elapsed:.1f}s gap)")
-                    self.event_log.append({
+                    event = {
                         "type":      "handoff",
                         "person":    person_name,
                         "from_loc":  prev_loc,
@@ -545,7 +586,9 @@ class GlobalIdentityManager:
                         "to_cam":    cam_id,
                         "elapsed_s": round(elapsed, 1),
                         "timestamp": now,
-                    })
+                    }
+                    self.event_log.append(event)
+                    self._log_to_redis(event)
             self.registry[person_name] = {
                 "cam_id":     cam_id,
                 "location":   location,
@@ -556,16 +599,27 @@ class GlobalIdentityManager:
             last = self._last_sighting.get(person_name, 0)
             if now - last >= self.SIGHTING_DEBOUNCE_S:
                 self._last_sighting[person_name] = now
-                self.event_log.append({
+                event = {
                     "type":       "sighting",
                     "person":     person_name,
                     "location":   location,
                     "cam_id":     cam_id,
                     "confidence": round(confidence, 3),
                     "timestamp":  now,
-                })
+                }
+                self.event_log.append(event)
+                self._log_to_redis(event)
             cutoff = now - self.RETENTION_SECONDS
             self.event_log = [e for e in self.event_log if e["timestamp"] >= cutoff]
+
+    def _log_to_redis(self, event):
+        """Log an event to Redis if available."""
+        try:
+            from cache.redis_cache import REDIS_AVAILABLE, log_detection
+            if REDIS_AVAILABLE:
+                log_detection(event)
+        except Exception:
+            pass
 
     def evict_stale_people(self):
         cutoff = time.time() - self.RETENTION_SECONDS
@@ -587,6 +641,17 @@ class GlobalIdentityManager:
             return " | ".join(parts)
 
     def recent_events(self, n: int = 20) -> list:
+        # Try Redis first
+        try:
+            from cache.redis_cache import REDIS_AVAILABLE, get_detection_history
+            if REDIS_AVAILABLE:
+                events = get_detection_history(limit=n)
+                if events:
+                    return events
+        except Exception:
+            pass
+
+        # Fallback to in-memory
         cutoff = time.time() - self.RETENTION_SECONDS
         with self._lock:
             valid = [e for e in self.event_log if e["timestamp"] >= cutoff]
