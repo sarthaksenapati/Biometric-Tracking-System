@@ -1,7 +1,7 @@
 # config.example.py
 # Copy this file to config.py and fill in your values.
 
-DROIDCAM_IP   = "192.168.x.x"   # ← your DroidCam IP here
+DROIDCAM_IP   = "192.168.29.141"   # ← your DroidCam IP here
 DROIDCAM_PORT = 4747
 
 CAMERA_SOURCES = {

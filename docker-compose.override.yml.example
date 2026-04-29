@@ -1,0 +1,33 @@
+# docker-compose.override.yml - Development mode (auto-loaded by docker-compose)
+# Copy this to docker-compose.override.yml to enable development mode with hot-reload
+#
+# Usage:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#   docker-compose up -d
+#
+# This will mount source code as volumes for hot-reload during development
+
+version: '3.8'
+
+services:
+  tracker:
+    volumes:
+      - ./run_tracker_multi.py:/app/run_tracker_multi.py
+      - ./core:/app/core
+      - ./models:/app/models
+      - ./utils:/app/utils
+      - ./iot_stream:/app/iot_stream
+
+  backend:
+    volumes:
+      - ./backend:/app/backend
+      - ./core:/app/core
+      - ./models:/app/models
+      - ./utils:/app/utils
+    command: ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  dashboard:
+    volumes:
+      - ./dashboard.py:/app/dashboard.py
+      - ./utils:/app/utils
+    command: ["streamlit", "run", "dashboard.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true", "--server.runOnSave=true"]

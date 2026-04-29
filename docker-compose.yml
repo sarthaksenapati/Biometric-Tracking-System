@@ -1,0 +1,107 @@
+version: '3.8'
+
+# Base Docker Compose configuration - works on all platforms
+# Override with docker-compose.linux.yml or docker-compose.windows.yml
+
+services:
+  # Redis for caching and pub/sub messaging
+  redis:
+    image: redis:7-alpine
+    container_name: biometric-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Tracker service - handles camera feeds and identification
+  tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile.tracker
+    container_name: biometric-tracker
+    ports:
+      - "${TRACKER_PORT:-8502}:8502"
+    volumes:
+      - ./embeddings_db:/app/embeddings_db
+      - ./tracker_state.json:/app/tracker_state.json
+      - ./tracker_history.json:/app/tracker_history.json
+      - ./unknown_persons.json:/app/unknown_persons.json
+      - ./tracker_admin.json:/app/tracker_admin.json
+      - ./models:/app/models
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=:99
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    # Linux: use docker-compose.linux.yml override for camera access
+    # Windows: run tracker on host, or use IP cameras
+
+  # Backend API service - FastAPI
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: biometric-backend
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./embeddings_db:/app/embeddings_db
+      - ./tracker_state.json:/app/tracker_state.json
+      - ./tracker_history.json:/app/tracker_history.json
+      - ./config.py:/app/config.py
+      - ./utils:/app/utils
+      - ./core:/app/core
+      - ./backend:/app/backend
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Dashboard service - Streamlit web interface
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: biometric-dashboard
+    ports:
+      - "${DASHBOARD_PORT:-8501}:8501"
+    volumes:
+      - ./tracker_state.json:/app/tracker_state.json
+      - ./tracker_history.json:/app/tracker_history.json
+      - ./config.py:/app/config.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - backend
+      - tracker
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  default:
+    name: biometric-network

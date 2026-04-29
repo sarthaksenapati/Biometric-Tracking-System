@@ -1,0 +1,18 @@
+# Docker Compose override for Linux
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.linux.yml up -d
+
+version: '3.8'
+
+services:
+  tracker:
+    volumes:
+      # Linux: mount webcam device
+      - /dev/video0:/dev/video0
+      - /dev/video1:/dev/video1  # Uncomment for additional cameras
+    devices:
+      - /dev/video0:/dev/video0
+      # - /dev/video1:/dev/video1  # Uncomment for additional cameras
+    privileged: true  # Needed for camera access
+    network_mode: "host"  # Access host network for IP cameras
+    environment:
+      - DISPLAY=:99

@@ -1,0 +1,31 @@
+# Docker Compose override for development
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+version: '3.8'
+
+services:
+  tracker:
+    volumes:
+      # Mount source code for hot-reload during development
+      - ./run_tracker_multi.py:/app/run_tracker_multi.py
+      - ./core:/app/core
+      - ./models:/app/models
+      - ./utils:/app/utils
+      - ./iot_stream:/app/iot_stream
+    command: ["python", "run_tracker_multi.py"]
+
+  backend:
+    volumes:
+      # Mount source code for hot-reload
+      - ./backend:/app/backend
+      - ./core:/app/core
+      - ./models:/app/models
+      - ./utils:/app/utils
+    command: ["uvicorn", "backend.app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  dashboard:
+    volumes:
+      # Mount source code for hot-reload
+      - ./dashboard.py:/app/dashboard.py
+      - ./utils:/app/utils
+    command: ["streamlit", "run", "dashboard.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true", "--server.runOnSave=true"]

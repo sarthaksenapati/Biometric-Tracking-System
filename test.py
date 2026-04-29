@@ -1,12 +1,13 @@
 """
-gpu_check.py — Run this BEFORE your tracker to confirm every model is on GPU.
+gpu_check.py — Diagnostic for Intel Iris Xe (CPU/OpenVINO setup)
 Usage:  python gpu_check.py
 """
 
 import sys
 
 print("\n" + "="*60)
-print("  GPU DIAGNOSTIC — Final Year Project")
+print("  SYSTEM DIAGNOSTIC — Final Year Project")
+print("  (Intel Iris Xe — CPU/OpenVINO mode)")
 print("="*60)
 
 # ── 1. PyTorch ────────────────────────────────────────────────────────────────
@@ -16,14 +17,11 @@ try:
     print(f"\n[PyTorch]  version={torch.__version__}")
     print(f"           CUDA available : {cuda_ok}")
     if cuda_ok:
-        print(f"           Device name    : {torch.cuda.get_device_name(0)}")
-        print(f"           VRAM total     : {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
-        print(f"           VRAM allocated : {torch.cuda.memory_allocated(0) / 1024**2:.0f} MB")
+        print(f"           ✅  GPU: {torch.cuda.get_device_name(0)}")
     else:
-        print("  ❌  CUDA not available — install torch with CUDA support:")
-        print("      pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
+        print("           ✅  Running on CPU — OK for Intel Iris Xe")
 except ImportError:
-    print("[PyTorch]  ❌  Not installed")
+    print("[PyTorch]  ❌  Not installed — run: pip install torch torchvision")
     cuda_ok = False
 
 # ── 2. ONNX Runtime ───────────────────────────────────────────────────────────
@@ -34,13 +32,15 @@ try:
     print(f"[ONNX RT]  version={ort.__version__}")
     print(f"           Providers: {providers}")
     if "CUDAExecutionProvider" in providers:
-        print("           ✅  CUDAExecutionProvider available")
+        print("           ✅  CUDA provider available")
+    elif "OpenVINOExecutionProvider" in providers:
+        print("           ✅  OpenVINO provider available (Intel GPU acceleration)")
+    elif "CPUExecutionProvider" in providers:
+        print("           ✅  CPU provider available — works fine for this project")
     else:
-        print("           ❌  CUDAExecutionProvider NOT available")
-        print("               Fix: pip install onnxruntime-gpu")
-        print("               Then: pip uninstall onnxruntime  (remove CPU version)")
+        print("           ❌  No usable provider found")
 except ImportError:
-    print("[ONNX RT]  ❌  Not installed — InsightFace needs this")
+    print("[ONNX RT]  ❌  Not installed — run: pip install onnxruntime")
 
 # ── 3. InsightFace ────────────────────────────────────────────────────────────
 print()
@@ -49,20 +49,26 @@ try:
     from insightface.app import FaceAnalysis
     print(f"[InsightFace] version={insightface.__version__}")
 
-    # Try loading with GPU (ctx_id=0 means GPU 0)
-    app = FaceAnalysis(name="buffalo_l", providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
-    app.prepare(ctx_id=0, det_size=(640, 640))
+    # CPU-safe initialization — no CUDA required
+    app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
+    app.prepare(ctx_id=-1, det_size=(640, 640))  # ctx_id=-1 = CPU
 
-    # Check which provider each model is actually using
     for model_name, model in app.models.items():
-        provider = getattr(model.session, "get_providers", lambda: ["unknown"])()
-        print(f"           Model '{model_name}' → provider={provider[0]}")
+        try:
+            provider = model.session.get_providers()[0]
+        except Exception:
+            provider = "unknown"
+        print(f"           Model '{model_name}' → provider={provider}")
 
-    print("           ✅  InsightFace loaded")
+    print("           ✅  InsightFace loaded successfully on CPU")
 except Exception as e:
     print(f"[InsightFace] ❌  Error: {e}")
+    if "buffalo_l" in str(e) or "download" in str(e).lower():
+        print("               → Model not downloaded yet, will auto-download on first run")
+    elif "providers" in str(e).lower():
+        print("               → Version mismatch. Run: pip install --upgrade insightface")
 
-# ── 4. YOLO (Ultralytics) ─────────────────────────────────────────────────────
+# ── 4. YOLO ───────────────────────────────────────────────────────────────────
 print()
 try:
     from ultralytics import YOLO
@@ -73,54 +79,38 @@ try:
     if "cuda" in str(device):
         print("           ✅  YOLO on GPU")
     else:
-        print("           ❌  YOLO on CPU — fix in detector.py (see below)")
+        print("           ✅  YOLO on CPU — fine for Intel Iris Xe")
 except Exception as e:
     print(f"[YOLO]     ❌  Error: {e}")
 
-# ── 5. Torchreid / OSNet ──────────────────────────────────────────────────────
+# ── 5. Torchreid ─────────────────────────────────────────────────────────────
 print()
 try:
     import torchreid
-    print(f"[Torchreid] ✅  installed")
-    if cuda_ok:
-        print(f"            Will use GPU automatically if model is moved to cuda")
-    else:
-        print(f"            ❌  No CUDA — will run on CPU")
+    print(f"[Torchreid] ✅  Installed")
+    print(f"            Running on CPU — fine for this project")
 except ImportError:
-    try:
-        import torch
-        # Check if reid model file exists
-        import os
-        reid_files = []
-        for root, dirs, files in os.walk("."):
-            for f in files:
-                if "reid" in f.lower() and f.endswith(".pt"):
-                    reid_files.append(os.path.join(root, f))
-        if reid_files:
-            print(f"[ReID]     Found model files: {reid_files}")
-        else:
-            print("[Torchreid] Not installed (pip install torchreid)")
-    except:
-        pass
+    print("[Torchreid] ❌  Not installed — run: pip install torchreid")
 
 # ── 6. Summary ────────────────────────────────────────────────────────────────
 print("\n" + "="*60)
-print("  WHAT TO DO IF SOMETHING IS ❌")
+print("  SUMMARY & NEXT STEPS")
 print("="*60)
 print("""
-InsightFace on CPU?
-  → pip uninstall onnxruntime
-  → pip install onnxruntime-gpu
+This project is configured for Intel Iris Xe (no NVIDIA GPU).
+CPU mode is fully supported — ignore all CUDA warnings.
 
-YOLO on CPU?
-  → In models/detector.py, change:
-        self.model = YOLO("yolov8n.pt")
-    to:
-        self.model = YOLO("yolov8n.pt")
-        self.model.to("cuda")
+If anything above shows ❌, run the relevant fix:
 
-PyTorch no CUDA?
-  → pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121
+  InsightFace error  → pip install --upgrade insightface
+  ONNX RT missing    → pip install onnxruntime
+  YOLO missing       → pip install ultralytics
+  Torchreid missing  → pip install torchreid
 
-After fixing, run this script again to verify.
+DO NOT install:
+  ✗ onnxruntime-gpu   (NVIDIA only)
+  ✗ torch with cu121  (NVIDIA only)
+
+Optional Intel acceleration:
+  pip install openvino onnxruntime-openvino
 """)

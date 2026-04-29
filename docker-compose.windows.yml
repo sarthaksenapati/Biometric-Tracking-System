@@ -1,0 +1,76 @@
+# Docker Compose override for Windows
+# Camera access works differently on Windows - camera devices are not directly accessible
+# Run tracker on host machine or use IP cameras (DroidCam, RTSP, etc.)
+
+version: '3.8'
+
+services:
+  # Tracker service - on Windows, run this on host or use IP cameras
+  tracker:
+    build:
+      context: .
+      dockerfile: Dockerfile.tracker
+    container_name: biometric-tracker
+    ports:
+      - "8502:8502"
+    volumes:
+      - ./embeddings_db:/app/embeddings_db
+      - ./tracker_state.json:/app/tracker_state.json
+      - ./tracker_history.json:/app/tracker_history.json
+      - ./unknown_persons.json:/app/unknown_persons.json
+      - ./tracker_admin.json:/app/tracker_admin.json
+      - ./models:/app/models
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=:99
+      - REDIS_URL=redis://redis:6379
+      # Windows: Use IP cameras (DroidCam, RTSP) instead of local webcam
+      # Local webcam access not available in Windows Docker
+    depends_on:
+      - redis
+    restart: unless-stopped
+    # Removed: network_mode: "host" (not supported on Windows)
+    # Removed: devices: (not supported on Windows)
+    # Removed: privileged: true (not supported on Windows)
+
+  # Backend API service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: biometric-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./embeddings_db:/app/embeddings_db
+      - ./tracker_state.json:/app/tracker_state.json
+      - ./tracker_history.json:/app/tracker_history.json
+      - ./config.py:/app/config.py
+      - ./utils:/app/utils
+      - ./core:/app/core
+      - ./backend:/app/backend
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Dashboard service
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    container_name: biometric-dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./tracker_state.json:/app/tracker_state.json
+      - ./tracker_history.json:/app/tracker_history.json
+      - ./config.py:/app/config.py
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      - backend
+    restart: unless-stopped
