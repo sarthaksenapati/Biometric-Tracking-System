@@ -1,6 +1,6 @@
 # Project Summary — Biometric Tracking System using AI & Computer Vision
 
-**Student:** Prityanshu Yadav  
+**Students:** Prityanshu Yadav, Sarthak Senapati  
 **Project Type:** B.Tech Final Year Project  
 **Date:** March 2025
 

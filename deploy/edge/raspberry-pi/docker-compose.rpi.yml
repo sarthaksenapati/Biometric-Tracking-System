@@ -1,0 +1,77 @@
+# Docker Compose for Raspberry Pi (3+/4)
+# Optimized for ARM64/ARMv7 edge deployment
+
+version: '3.8'
+
+services:
+  # Tracker - lightweight mode for RPi
+  tracker:
+    build:
+      context: .
+      dockerfile: deploy/edge/rpi/Dockerfile.tracker.rpi
+    container_name: biometric-tracker-rpi
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MODEL_SIZE=small  # Use smaller YOLO model (yolov8n)
+      - DETECTION_INTERVAL=5  # Process every 5th frame for performance
+    volumes:
+      - /dev/video0:/dev/video0  # USB webcam
+      - ./embeddings_db:/app/embeddings_db:ro
+      - ./tracker_state.json:/app/tracker_state.json
+    devices:
+      - /dev/video0:/dev/video0
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    deploy:
+      resources:
+        limits:
+          cpus: '3'
+          memory: 1.5G
+    # RPi: Disable gait (compute intensive) and use body-only or face-only
+    command: ["python", "run_tracker_multi.py", "--lightweight", "--disable-gait"]
+
+  # Backend API - minimal
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/edge/rpi/Dockerfile.backend.rpi
+    container_name: biometric-backend-rpi
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./embeddings_db:/app/embeddings_db:ro
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+
+  # Redis - very lightweight
+  redis:
+    image: redis:6.2-alpine
+    container_name: biometric-redis-rpi
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+
+# Usage:
+# 1. Flash Raspberry Pi OS (64-bit recommended) to SD card
+# 2. Enable camera interface: sudo raspi-config
+# 3. Install Docker:
+#    curl -sSL https://get.docker.com | sh
+#    sudo usermod -aG docker $USER
+# 4. Copy project to RPi:
+#    scp -r biometric-tracking-system pi@rpi-ip:~/
+# 5. SSH into RPi:
+#    ssh pi@rpi-ip
+#    cd biometric-tracking-system
+# 6. Run:
+#    docker-compose -f docker-compose.yml -f deploy/edge/rpi/docker-compose.rpi.yml up -d

@@ -15,6 +15,25 @@ from models.gait_model import GaitModel
 from core.matcher      import Matcher
 from utils.embeddings  import save_embedding
 
+# Database and queue support (optional)
+USE_DATABASE = os.getenv("USE_DATABASE", "true").lower() == "true"
+if USE_DATABASE:
+    try:
+        from db.models import Event as DBEvent, Camera as DBCamera, Detection as DBDetection
+        from cache import get_cache
+        print("[MULTI] ✅ Database modules loaded")
+    except ImportError as e:
+        print(f"[MULTI] ⚠️  Database import failed: {e}")
+        USE_DATABASE = False
+
+USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
+if USE_QUEUE:
+    try:
+        from queue import get_queue
+        print("[MULTI] ✅ Queue module loaded")
+    except ImportError as e:
+        print(f"[MULTI] ⚠️  Queue import failed: {e}")
+        USE_QUEUE = False
 
 ADMIN_CONTROL_FILE = "tracker_admin.json"
 
@@ -516,9 +535,11 @@ class GlobalIdentityManager:
     def __init__(self, cam_locations: dict):
         self.cam_locations   = cam_locations
         self.registry:  dict = {}
-        self.event_log: list = []
+        self.event_log: list = []  # In-memory fallback
         self._last_sighting: dict = {}
         self._lock = threading.Lock()
+        self._use_db = USE_DATABASE
+        self._cache = get_cache() if USE_DATABASE else None
 
     def _loc(self, cam_id) -> str:
         return self.cam_locations.get(cam_id, f"Cam{cam_id}")
@@ -536,7 +557,7 @@ class GlobalIdentityManager:
                     prev_loc = self._loc(prev["cam_id"])
                     print(f"[HANDOFF] {person_name}  "
                           f"{prev_loc} → {location}  ({elapsed:.1f}s gap)")
-                    self.event_log.append({
+                    event_data = {
                         "type":      "handoff",
                         "person":    person_name,
                         "from_loc":  prev_loc,
@@ -545,7 +566,15 @@ class GlobalIdentityManager:
                         "to_cam":    cam_id,
                         "elapsed_s": round(elapsed, 1),
                         "timestamp": now,
-                    })
+                    }
+                    if self._use_db:
+                        try:
+                            DBEvent.log(**event_data)
+                        except Exception as e:
+                            print(f"[IDENTITY] DB log failed: {e}")
+                            self.event_log.append(event_data)
+                    else:
+                        self.event_log.append(event_data)
             self.registry[person_name] = {
                 "cam_id":     cam_id,
                 "location":   location,
@@ -556,16 +585,31 @@ class GlobalIdentityManager:
             last = self._last_sighting.get(person_name, 0)
             if now - last >= self.SIGHTING_DEBOUNCE_S:
                 self._last_sighting[person_name] = now
-                self.event_log.append({
+                event_data = {
                     "type":       "sighting",
                     "person":     person_name,
                     "location":   location,
                     "cam_id":     cam_id,
                     "confidence": round(confidence, 3),
                     "timestamp":  now,
-                })
-            cutoff = now - self.RETENTION_SECONDS
-            self.event_log = [e for e in self.event_log if e["timestamp"] >= cutoff]
+                }
+                if self._use_db:
+                    try:
+                        DBEvent.log(**event_data)
+                        # Also save detection
+                        DBDetection.save(
+                            person_name, cam_id, track_id,
+                            confidence, [], location, now
+                        )
+                    except Exception as e:
+                        print(f"[IDENTITY] DB log failed: {e}")
+                        self.event_log.append(event_data)
+                else:
+                    self.event_log.append(event_data)
+            # Cleanup in-memory events if not using DB
+            if not self._use_db:
+                cutoff = now - self.RETENTION_SECONDS
+                self.event_log = [e for e in self.event_log if e["timestamp"] >= cutoff]
 
     def evict_stale_people(self):
         cutoff = time.time() - self.RETENTION_SECONDS
@@ -575,6 +619,14 @@ class GlobalIdentityManager:
             for n in stale:
                 print(f"[IDENTITY] 🗑️  '{n}' evicted")
                 del self.registry[n]
+
+        # Also prune old events from DB
+        if self._use_db:
+            try:
+                DBEvent.prune_old(cutoff)
+                DBDetection.prune_old(cutoff)
+            except Exception as e:
+                print(f"[IDENTITY] DB prune failed: {e}")
 
     def status_str(self) -> str:
         with self._lock:
@@ -587,6 +639,13 @@ class GlobalIdentityManager:
             return " | ".join(parts)
 
     def recent_events(self, n: int = 20) -> list:
+        if self._use_db:
+            try:
+                since = time.time() - self.RETENTION_SECONDS
+                return DBEvent.get_recent(limit=n, since=since)
+            except Exception as e:
+                print(f"[IDENTITY] DB query failed: {e}")
+        # Fallback to in-memory
         cutoff = time.time() - self.RETENTION_SECONDS
         with self._lock:
             valid = [e for e in self.event_log if e["timestamp"] >= cutoff]

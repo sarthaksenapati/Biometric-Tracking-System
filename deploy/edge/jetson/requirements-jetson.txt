@@ -1,0 +1,28 @@
+# Optimized requirements for NVIDIA Jetson Nano
+
+# Core - use ARM-compatible versions
+numpy==1.24.4
+torch==1.10.0  # Use Jetson-optimized PyTorch (install via JetPack)
+torchvision==0.11.1
+# torchaudio not needed for Jetson deployment
+
+# Computer Vision - lightweight
+opencv-python-headless==4.8.0.76
+
+# YOLO - use lighter model
+ultralytics==8.0.20
+
+# Face Recognition - optional, comment out if not needed for edge
+# deepface  # Disabled for edge - use InsightFace instead
+# onnxruntime  # May not work on ARM - use TRT optimized models
+
+# Backend - minimal
+fastapi==0.100.0
+uvicorn==0.22.0
+
+# Dashboard - optional for edge (can run on separate device)
+# streamlit  # Comment out if dashboard runs remotely
+
+# Utilities
+matplotlib==3.3.4  # Older version for compatibility
+pillow==9.5.0

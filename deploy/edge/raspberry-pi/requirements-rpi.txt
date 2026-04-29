@@ -1,0 +1,22 @@
+# Optimized requirements for Raspberry Pi (ARM)
+
+# Core - lightweight versions
+numpy==1.24.4
+# torch - too heavy for RPi, use lightweight alternatives
+# torchvision - skip
+
+# Computer Vision - headless to save space
+opencv-python-headless==4.8.0.76
+
+# YOLO - use nano model only
+ultralytics==8.0.20
+
+# Skip deepface (too heavy for RPi)
+# Skip onnxruntime (ARM compatibility issues)
+
+# Backend - minimal
+fastapi==0.100.0
+uvicorn==0.22.0
+
+# Utilities - minimal
+pillow==9.5.0

@@ -1,0 +1,24 @@
+# Dockerfile.tracker.rpi - Optimized for Raspberry Pi (ARM)
+FROM arm32v7/python:3.9-slim-bullseye
+
+# Install system dependencies (minimal)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libopencv-dev \
+    python3-opencv \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy requirements and install
+COPY requirements-rpi.txt .
+RUN pip install --no-cache-dir -r requirements-rpi.txt
+
+# Copy project
+COPY . .
+
+# RPi optimizations
+ENV PYTHONUNBUFFERED=1
+ENV OPENCV_LOG_LEVEL=ERROR
+
+CMD ["python", "run_tracker_multi.py", "--lightweight"]

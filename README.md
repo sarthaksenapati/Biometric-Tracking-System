@@ -74,7 +74,9 @@ The system provides **real-time tracking** across multiple cameras, **fusion-bas
 - **Trust System**: Face required for confident identification
 
 #### 📊 Database & Matching
-- Embedding storage in NumPy format (.npy files)
+- **PostgreSQL**: Primary storage for embeddings, events, and detections (replaces .npy files)
+- **Redis Cache**: In-memory caching for fast embedding lookups and recent detections
+- **File Fallback**: Automatic fallback to .npy files when database is unavailable
 - Cosine similarity matching with configurable thresholds
 - Support for multiple exemplars per person
 - Unknown person detection and storage
@@ -136,9 +138,14 @@ The system provides **real-time tracking** across multiple cameras, **fusion-bas
 | **Face Recognition** | InsightFace, DeepFace (FaceNet) |
 | **Body ReID** | Custom OSNet-x1.0 (MSMT17 pretrained) |
 | **Gait Analysis** | Custom silhouette extraction |
+| **Database** | PostgreSQL 16+ (primary), NumPy files (fallback) |
+| **Caching** | Redis 7+ (embeddings, detections) |
+| **Message Queue** | Redis Streams / RabbitMQ (optional, async processing) |
 | **Backend** | FastAPI, Uvicorn |
 | **Dashboard** | Streamlit |
-| **Data Processing** | NumPy |
+| **Deployment** | Docker, Docker Compose, Render.com |
+| **CI/CD** | GitHub Actions |
+| **Data Processing** | NumPy, psycopg2, redis-py |
 | **Utilities** | JSON, Threading, Collections |
 
 ---
@@ -147,7 +154,7 @@ The system provides **real-time tracking** across multiple cameras, **fusion-bas
 
 ### Prerequisites
 - Python 3.10 or higher
-- CUDA-compatible GPU (recommended for real-time performance)
+- CUDA-compatible GPU (recommended for real-time performance) or Intel Iris Xe
 - Webcam or IP cameras for testing
 
 ### Step-by-Step Setup
@@ -416,10 +423,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-## 👨‍💻 Author
+## 👨‍💻 Authors
 
 **Prityanshu Yadav**  
 B.Tech Final Year Project  
+Department of Computer Science & Engineering
+
+**Sarthak Senapati**  
+Co-Developer  
 Department of Computer Science & Engineering
 
 ### Acknowledgments
@@ -429,14 +440,23 @@ Department of Computer Science & Engineering
 - [PyTorch](https://pytorch.org/) community
 - [OpenCV](https://opencv.org/) team
 
+### Contributors
+- **Prityanshu Yadav** - Project Lead, Core Development
+- **Sarthak Senapati** - Co-Developer, Development & Testing
+
 ---
 
 ## 📞 Contact
 
-For questions or collaboration:
+**Prityanshu Yadav:**
 - **Email**: prityanshu.yadav@email.com
 - **GitHub**: [@prityanshu-yadav](https://github.com/prityanshu-yadav)
 - **LinkedIn**: [Prityanshu Yadav](https://linkedin.com/in/prityanshu-yadav)
+
+**Sarthak Senapati:**
+- **Email**: sarthaksenapati566@gmail.com
+- **GitHub**: [@sarthaksenapati](https://github.com/sarthaksenapati)
+- **LinkedIn**: [Sarthak Senapati](https://linkedin.com/in/sarthaksenapati)
 
 ---
 
@@ -559,9 +579,13 @@ This project demonstrates concepts from Computer Vision, Machine Learning, Deep 
 
 ---
 
-## 👨‍💻 Author
+## 👨‍💻 Authors
 
-**Prityanshu Yadav** — B.Tech Final Year Project
+**Prityanshu Yadav** — B.Tech Final Year Project  
+Department of Computer Science & Engineering
+
+**Sarthak Senapati** — Co-Developer  
+Department of Computer Science & Engineering
 
 ---
 

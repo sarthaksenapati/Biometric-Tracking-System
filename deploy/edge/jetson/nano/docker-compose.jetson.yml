@@ -1,0 +1,103 @@
+# Docker Compose for NVIDIA Jetson Nano
+# Optimized for edge deployment with hardware acceleration
+
+version: '3.8'
+
+services:
+  tracker:
+    build:
+      context: .
+      dockerfile: deploy/edge/jetson/Dockerfile.tracker.jetson
+    container_name: biometric-tracker-edge
+    runtime: nvidia  # Use NVIDIA runtime for GPU acceleration
+    environment:
+      - DISPLAY=:0
+      - PYTHONUNBUFFERED=1
+      - CUDA_VISIBLE_DEVICES=0
+      - OMP_NUM_THREADS=4
+    volumes:
+      - /dev/video0:/dev/video0  # CSI camera or USB webcam
+      - ./embeddings_db:/app/embeddings_db:rw
+      - ./tracker_state.json:/app/tracker_state.json
+      - ./tracker_history.json:/app/tracker_history.json
+    devices:
+      - /dev/video0:/dev/video0
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 3G
+    # Jetson-specific: reduce model precision for speed
+    command: ["python", "run_tracker_multi.py", "--precision", "fp16"]
+
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/edge/jetson/Dockerfile.backend.jetson
+    container_name: biometric-backend-edge
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - ./embeddings_db:/app/embeddings_db:ro
+      - ./tracker_state.json:/app/tracker_state.json
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+    depends_on:
+      - redis
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: deploy/edge/jetson/Dockerfile.dashboard.jetson
+    container_name: biometric-dashboard-edge
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./tracker_state.json:/app/tracker_state.json
+      - ./tracker_history.json:/app/tracker_history.json
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+    depends_on:
+      - backend
+
+  redis:
+    image: redis:6.2-alpine  # Smaller image for edge
+    container_name: biometric-redis-edge
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+
+volumes:
+  redis_data:
+
+# Usage:
+# 1. Flash JetPack to Jetson Nano (includes Docker + CUDA)
+# 2. Copy project to Jetson:
+#    scp -r biometric-tracking-system user@jetson-ip:~/
+# 3. SSH into Jetson:
+#    ssh user@jetson-ip
+#    cd biometric-tracking-system
+# 4. Run:
+#    docker-compose -f docker-compose.yml -f deploy/edge/jetson/docker-compose.jetson.yml up -d

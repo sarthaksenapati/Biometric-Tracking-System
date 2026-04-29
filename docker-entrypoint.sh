@@ -18,6 +18,12 @@ for i in {1..10}; do
     sleep 0.5
 done
 
+# Initialize database if using PostgreSQL
+if [ "$USE_DATABASE" = "true" ]; then
+    echo "Initializing database..."
+    python -c "from db.connection import init_db; init_db()" || echo "DB init failed, continuing anyway..."
+fi
+
 # Trap signals to properly shutdown
 trap "echo 'Stopping...'; kill $XVFB_PID; exit" SIGINT SIGTERM
 

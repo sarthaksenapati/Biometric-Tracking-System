@@ -1,0 +1,71 @@
+# Render.com Deployment Configuration
+# Usage:
+# 1. Push this file to your repo
+# 2. Connect your GitHub repo to Render
+# 3. Render will auto-detect this file
+
+services:
+  # Backend API Service
+  - type: web
+    name: biometric-backend
+    env: python
+    plan: starter  # Use 'free' for testing, 'starter' for production
+    region: ohi  # Choose: ohi, oregon, singapore, frankfurt
+    buildCommand: |
+      pip install -r requirements.txt
+      python -m compileall .
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: REDIS_URL
+        fromDatabase:
+          name: biometric-redis
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+    healthCheckPath: /
+    autoDeploy: true
+    numInstances: 1
+
+  # Dashboard Service
+  - type: web
+    name: biometric-dashboard
+    env: python
+    plan: starter
+    region: ohi
+    buildCommand: |
+      pip install -r requirements.txt
+      python -m compileall .
+    startCommand: streamlit run dashboard.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: REDIS_URL
+        fromDatabase:
+          name: biometric-redis
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+    healthCheckPath: /
+    autoDeploy: true
+    numInstances: 1
+
+  # Redis Database (for caching)
+  - type: redis
+    name: biometric-redis
+    ipAllowList: []
+    plan: starter  # Use 'free' for testing
+
+# Note: The tracker service needs to run LOCALLY because:
+# 1. It requires camera access (webcam/IP camera)
+# 2. Docker containers on Render cannot access local cameras
+# 3. Run locally: python run_tracker_multi.py
+#
+# The local tracker will communicate with the deployed backend
+# via the public Render URL:
+# - Update config.py with backend URL: https://biometric-backend.onrender.com

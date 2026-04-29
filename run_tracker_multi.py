@@ -12,9 +12,22 @@
 #   Edit config.py in the project root to change IP, sources, or locations.
 #   You never need to touch this file for camera changes.
 
+import os
 import time
 import json
 import threading
+
+# Initialize database if using PostgreSQL
+USE_DATABASE = os.getenv("USE_DATABASE", "true").lower() == "true"
+if USE_DATABASE:
+    try:
+        from db.connection import init_db
+        init_db()
+        print("[MAIN] ✅ Database initialized")
+    except Exception as e:
+        print(f"[MAIN] ⚠️  Database init failed: {e}")
+        print("[MAIN] Continuing with file-based storage...")
+
 from core.multi_tracker import MultiCameraTracker
 from config import CAMERA_SOURCES, CAMERA_LOCATIONS   # ← all camera config lives here
 

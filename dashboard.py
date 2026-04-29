@@ -7,15 +7,27 @@
 # Terminal 1:  python run_tracker_multi.py
 # Terminal 2:  python -m streamlit run dashboard.py
 
+import os
 import time
 import json
-import os
 from datetime import datetime, timedelta
 import streamlit as st
 
-# ─────────────────────────────────────────────────────────────────────────────
+# Database support (optional)
+USE_DATABASE = os.getenv("USE_DATABASE", "true").lower() == "true"
+try:
+    if USE_DATABASE:
+        from db.models import Event as DBEvent, Person as DBPerson
+        print("[DASHBOARD] ✅ Database module loaded")
+    else:
+        raise ImportError("File-based mode")
+except ImportError:
+    print("[DASHBOARD] ⚠️  Using file-based storage")
+    USE_DATABASE = False
+
+# ─────────────────────────────────────────────────────────────────────
 # CONFIG
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 
 STATE_FILE              = "tracker_state.json"
 HISTORY_FILE            = "tracker_history.json"   # persistent across sessions
@@ -24,9 +36,9 @@ MAX_EVENTS_SHOWN        = 60
 STALE_THRESHOLD_S       = 5
 HISTORY_RETENTION_DAYS  = 7   # keep 7 days of history
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 # Page config
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 
 st.set_page_config(
     page_title            = "Biometric Tracker",
@@ -71,10 +83,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 # Helper: format age
-# (defined early so it can be called anywhere below, including the sidebar)
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 
 def _fmt_age(seconds: float) -> str:
     if seconds < 60:
@@ -85,11 +96,24 @@ def _fmt_age(seconds: float) -> str:
         return f"{seconds/3600:.1f}h"
     return f"{seconds/86400:.1f}d"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Load state and history
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
+# Load state and history (Database or File-based)
+# ─────────────────────────────────────────────────────────────────────
 
 def load_state() -> dict | None:
+    """Load tracker state from DB or file."""
+    if USE_DATABASE:
+        try:
+            # Try Redis cache first
+            from cache import get_cache
+            cache = get_cache()
+            if cache.is_available:
+                state = cache.get_cached_tracker_state()
+                if state:
+                    return state
+        except Exception:
+            pass
+
     if not os.path.exists(STATE_FILE):
         return None
     try:
@@ -98,16 +122,32 @@ def load_state() -> dict | None:
     except (json.JSONDecodeError, OSError):
         return None
 
-
 def load_history() -> dict:
-    """
-    Load persistent history file.
-    Structure:
-    {
-      "last_seen": { "PersonName": {"location": ..., "timestamp": ..., "confidence": ...} },
-      "events":    [ {sighting/handoff event dicts} ... ]
-    }
-    """
+    """Load persistent history from DB or file."""
+    if USE_DATABASE:
+        try:
+            history = {
+                "last_seen": {},
+                "events": []
+            }
+            # Load recent events from DB
+            events = DBEvent.get_recent(limit=1000)
+            history["events"] = [dict(e) for e in events]
+
+            # Build last_seen from persons
+            persons = DBPerson.list_all()
+            for p in persons:
+                history["last_seen"][p['name']] = {
+                    "location": "Unknown",
+                    "timestamp": p['created_at'].timestamp() if p.get('created_at') else time.time(),
+                    "confidence": 0.0,
+                }
+
+            return history
+        except Exception as e:
+            print(f"[DASHBOARD] DB load failed: {e}")
+
+    # Fallback to file
     if not os.path.exists(HISTORY_FILE):
         return {"last_seen": {}, "events": []}
     try:
@@ -118,15 +158,25 @@ def load_history() -> dict:
 
 
 def merge_and_save_history(current_state: dict):
-    """
-    Merge current tracker_state.json events into tracker_history.json.
-    Called every dashboard refresh so history stays up to date.
-    Deduplicates by timestamp+person+type.
-    Prunes events older than HISTORY_RETENTION_DAYS.
-    """
+    """Merge current tracker_state.json events into history."""
     if not current_state:
         return
 
+    if USE_DATABASE:
+        try:
+            # Events are already in DB (logged by tracker)
+            # Just update last_seen
+            for person in current_state.get("active_people", []):
+                name = person.get("name")
+                if not name or name == "Unknown":
+                    continue
+                # Update in DB via tracker
+                pass
+            return
+        except Exception as e:
+            print(f"[DASHBOARD] DB merge failed: {e}")
+
+    # File-based fallback
     history = load_history()
     cutoff  = time.time() - HISTORY_RETENTION_DAYS * 86400
 
@@ -194,8 +244,7 @@ def merge_and_save_history(current_state: dict):
     except OSError as exc:
         st.warning(f"Could not write history: {exc}")
 
-
-# ── Load everything ────────────────────────────────────────────────────────────
+# ── Load everything ────────────────────────────────────────────────────
 
 state        = load_state()
 file_exists  = state is not None
@@ -214,9 +263,9 @@ retention_min = state.get("retention_min",  5)  if state else 5
 online_count  = sum(1 for c in cameras if c.get("online", False))
 handoff_count = sum(1 for e in all_events if e.get("type") == "handoff")
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 # Sidebar
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 
 with st.sidebar:
     st.markdown("## 🎯 Biometric Tracker")
@@ -352,10 +401,9 @@ with st.sidebar:
         f"Refresh: {REFRESH_INTERVAL_S}s"
     )
 
-
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 # Main area
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 
 st.markdown("# Multi-Camera Biometric Tracker")
 st.caption("Live video is shown in the OpenCV window. This dashboard shows identity & event data.")
@@ -391,9 +439,9 @@ m5.metric("Known Persons (history)",  total_known)
 
 st.markdown("---")
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 # Active people
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 
 st.markdown("### 👤 Active People")
 
@@ -420,9 +468,9 @@ else:
 
 st.markdown("---")
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 # Known persons history panel
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 
 with st.expander(f"📚 All Known Persons — History ({total_known} people)", expanded=False):
     if not history["last_seen"]:
@@ -437,7 +485,7 @@ with st.expander(f"📚 All Known Persons — History ({total_known} people)", e
         for i, (name, info) in enumerate(sorted_persons):
             col  = h_cols[i % 3]
             age  = time.time() - info["timestamp"]
-            when = datetime.fromtimestamp(info["timestamp"]).strftime("%d %b  %H:%M")
+            when = datetime.fromtimestamp(info["timestamp"]).strftime("%d %b %H:%M")
             col.markdown(f"""
 <div class="person-card">
   <div class="p-name">👤 {name}</div>
@@ -448,9 +496,9 @@ with st.expander(f"📚 All Known Persons — History ({total_known} people)", e
 
 st.markdown("---")
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 # Event log — scope aware
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 
 st.markdown("### 📋 Event Log")
 
@@ -460,10 +508,10 @@ if history_scope == "Current session":
     scope_events = all_events
 elif history_scope == "Last 1 hour":
     cutoff = now - 3600
-    scope_events = [e for e in history["events"] if e.get("timestamp", 0) >= cutoff]
+    scope_events = [e for e in history["events"] if e["timestamp"] >= cutoff]
 elif history_scope == "Last 24 hours":
     cutoff = now - 86400
-    scope_events = [e for e in history["events"] if e.get("timestamp", 0) >= cutoff]
+    scope_events = [e for e in history["events"] if e["timestamp"] >= cutoff]
 else:  # Last 7 days
     scope_events = history["events"]
 
@@ -510,9 +558,9 @@ else:
                 unsafe_allow_html=True,
             )
 
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 # Auto-refresh
-# ─────────────────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────
 
 placeholder = st.empty()
 for remaining in range(REFRESH_INTERVAL_S, 0, -1):

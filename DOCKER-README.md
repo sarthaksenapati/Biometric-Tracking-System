@@ -2,6 +2,8 @@
 
 This directory contains Docker configuration for containerizing the biometric tracking system.
 
+**Authors:** Prityanshu Yadav, Sarthak Senapati
+
 ## Services
 
 | Service | Description | Port |

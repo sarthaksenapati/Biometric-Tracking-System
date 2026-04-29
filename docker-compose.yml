@@ -4,6 +4,25 @@ version: '3.8'
 # Override with docker-compose.linux.yml or docker-compose.windows.yml
 
 services:
+  # PostgreSQL database for persistent storage
+  postgres:
+    image: postgres:16-alpine
+    container_name: biometric-postgres
+    environment:
+      - POSTGRES_USER=biometric
+      - POSTGRES_PASSWORD=biometric
+      - POSTGRES_DB=biometric_tracking
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U biometric"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # Redis for caching and pub/sub messaging
   redis:
     image: redis:7-alpine
@@ -64,8 +83,13 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://biometric:biometric@postgres:5432/biometric_tracking
+      - USE_DATABASE=true
     depends_on:
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/"]
@@ -88,9 +112,12 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - REDIS_URL=redis://redis:6379
+      - DATABASE_URL=postgresql://biometric:biometric@postgres:5432/biometric_tracking
+      - USE_DATABASE=true
     depends_on:
       - backend
       - tracker
+      - postgres
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/"]

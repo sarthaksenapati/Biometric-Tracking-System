@@ -1,13 +1,20 @@
+# core/matcher.py
+
 import os
 import numpy as np
 from core.fusion_engine import FusionEngine
+from db.models import Embedding as DBEmbedding, Person as DBPerson
+from cache import get_cache
+
+# Flag to use database or file-based storage
+USE_DATABASE = os.getenv("USE_DATABASE", "true").lower() == "true"
 
 
 def cosine_similarity(a, b):
     """
     Cosine similarity between query vector a and reference b.
-    b can be shape (512,)    — single exemplar
-    b can be shape (N, 512)  — multiple exemplars (Fix 1)
+    b can be shape (512,)  — single exemplar
+    b can be shape (N, 512) — multiple exemplars (Fix 1)
     In the multi-exemplar case, returns the MAX similarity across all stored samples.
     """
     if a is None or b is None:
@@ -43,38 +50,62 @@ class Matcher:
         self.db_path = db_path
         self.database = {}
         self.fusion = FusionEngine()
+        self.cache = get_cache()
 
-        # Fix 2 — dynamic threshold scales with gallery size
-        # Fix 3 — margin increased from 0.05 to 0.15
-        # MUST be defined before load_database() is called
+        # Dynamic threshold scales with gallery size
         self.BASE_THRESHOLD         = 0.45
-        self.THRESHOLD_WITHOUT_FACE = 0.99   # effectively disabled — body alone unreliable
-        self.MARGIN                 = 0.15   # minimum gap between best and 2nd place
+        self.THRESHOLD_WITHOUT_FACE = 0.99   # effectively disabled
+        self.MARGIN                 = 0.15
 
         self.load_database()
 
     def _dynamic_threshold(self):
-        """
-        Fix 2 — threshold scales with gallery size.
-        More registered people = stricter threshold needed to avoid false positives.
-        3 people  → 0.45 (base)
-        5 people  → 0.49
-        8 people  → 0.55
-        10 people → 0.59
+        """Threshold scales with gallery size.
+        3 people → 0.45 (base), 5 → 0.49, 8 → 0.55, 10 → 0.59
         """
         gallery_size = len(self.database)
         extra = max(0, gallery_size - 3) * 0.02
         return self.BASE_THRESHOLD + extra
 
     def load_database(self):
+        """Load embeddings from PostgreSQL (primary) or .npy files (fallback)."""
         self.database = {}
 
+        if USE_DATABASE:
+            try:
+                # Try loading from PostgreSQL
+                for modality in ["face", "body", "gait"]:
+                    db = DBEmbedding.load_all(modality)
+                    for name, emb in db.items():
+                        if name not in self.database:
+                            self.database[name] = {}
+                        self.database[name][modality] = emb
+
+                if self.database:
+                    print(f"\n[DB LOAD] ✅ Loaded from PostgreSQL: {list(self.database.keys())}")
+                    # Cache in Redis for faster lookups
+                    if self.cache.is_available:
+                        for modality in ["face", "body", "gait"]:
+                            modality_db = {name: data.get(modality)
+                                         for name, data in self.database.items()
+                                         if data.get(modality) is not None}
+                            if modality_db:
+                                self.cache.cache_all_embeddings(modality, modality_db)
+                    print(f"[DB LOAD] Dynamic threshold for {len(self.database)} people: "
+                          f"{self._dynamic_threshold():.2f}\n")
+                    return
+                else:
+                    print("[DB LOAD] ⚠️  No data in database, falling back to .npy files")
+            except Exception as e:
+                print(f"[DB LOAD] ⚠️  Database error ({e}), falling back to .npy files")
+
+        # Fallback: load from .npy files (original behavior)
         if not os.path.exists(self.db_path):
             print(f"[DB LOAD] ⚠️  Folder not found: {self.db_path}")
             return
 
         files = os.listdir(self.db_path)
-        print(f"\n[DB LOAD] Files: {files}\n")
+        print(f"\n[DB LOAD] Files (file-based): {files}\n")
 
         for file in files:
             if not file.endswith(".npy"):
@@ -91,7 +122,6 @@ class Matcher:
                 if name not in self.database:
                     self.database[name] = {}
                 self.database[name][modality] = emb
-                # (512,) = single exemplar, (N, 512) = multi-exemplar
                 print(f"[DB LOAD] ✅  {name} → {modality}  shape={emb.shape}")
             except Exception as e:
                 print(f"[DB LOAD] ❌  {file}: {e}")
@@ -101,12 +131,11 @@ class Matcher:
               f"{self._dynamic_threshold():.2f}\n")
 
     def reload(self):
-        """
-        Reload embeddings_db/ without restarting the tracker.
-        Called automatically by AutoEnroller after a new person is promoted,
-        so they are immediately recognised by the matcher as a known user.
-        """
+        """Reload embeddings from database/files without restarting."""
         print(f"[Matcher] 🔄 Reloading database...")
+        # Invalidate Redis cache
+        if self.cache.is_available:
+            self.cache.invalidate_embedding()
         self.load_database()
         print(f"[Matcher] ✅ Reload complete — "
               f"{len(self.database)} persons now in DB: "
@@ -117,7 +146,7 @@ class Matcher:
             return "Unknown", 0.0
 
         scores = []
-        threshold = self._dynamic_threshold()   # Fix 2
+        threshold = self._dynamic_threshold()
 
         for person, data in self.database.items():
             face_sim = cosine_similarity(face_emb, data.get("face"))
