@@ -26,7 +26,7 @@ uvicorn>=0.22.0
 pydantic>=2.0.0
 
 # ── Dashboard ──────────────────────────────────────────────
-streamlit>=1.28.0
+streamlit>=1.28.0,<1.50.0  # Pin before 1.50 bug (queue.SimpleQueue)
 
 # ── Database ────────────────────────────────────────────────
 psycopg2-binary>=2.9.0  # PostgreSQL adapter (binary avoids build deps)
@@ -61,4 +61,4 @@ fastapi
 uvicorn
 
 # 🔹 Dashboard
-streamlit
+streamlit>=1.28.0,<1.50.0  # Pin before 1.50 bug
