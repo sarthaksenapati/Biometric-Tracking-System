@@ -38,8 +38,11 @@ services:
     region: ohi
     buildCommand: |
       pip install -r requirements.txt
+      python patch_streamlit.py || true
       python -m compileall .
-    startCommand: streamlit run dashboard.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
+    startCommand: |
+      python patch_streamlit.py || true
+      streamlit run dashboard.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
     envVars:
       - key: PYTHON_VERSION
         value: 3.10.0

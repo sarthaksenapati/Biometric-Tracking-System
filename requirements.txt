@@ -25,10 +25,10 @@ fastapi>=0.100.0
 uvicorn>=0.22.0
 pydantic>=2.0.0
 
-# ── Dashboard ──────────────────────────────────────────────
-streamlit>=1.28.0,<1.50.0  # Pin before 1.50 bug (queue.SimpleQueue)
+# ── Dashboard ──────────────────────────────────────
+streamlit>=1.28.0  # Pinned: 1.50.0 has queue.SimpleQueue bug with Python 3.12+
 
-# ── Database ────────────────────────────────────────────────
+# ── Database ────────────────────────────────────────
 psycopg2-binary>=2.9.0  # PostgreSQL adapter (binary avoids build deps)
 
 # ── Caching & Queuing ─────────────────────────────────────
@@ -40,25 +40,10 @@ redis>=5.0.0  # Redis client
 # ── Utilities & Visualization ──────────────────────────────
 matplotlib
 pillow
+requests>=2.31.0  # For tracker → backend communication
 
-# 🔹 Core Deep Learning (GPU-compatible if CUDA torch installed separately)
-torch
-torchvision
-
-# 🔹 Computer Vision
-ultralytics
-opencv-python
-
-# 🔹 Data handling
-numpy
-
-# 🔹 Face Recognition
-deepface
-onnxruntime  # For InsightFace support
-
-# 🔹 Backend API
-fastapi
-uvicorn
-
-# 🔹 Dashboard
-streamlit>=1.28.0,<1.50.0  # Pin before 1.50 bug
+# ── Development & Testing ─────────────────────────────────
+# pytest
+# black
+# flake8
+# mypy
