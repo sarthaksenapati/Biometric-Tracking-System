@@ -69,7 +69,8 @@ def migrate_embeddings():
             except Exception as e:
                 print(f"  ❌ Failed {file}: {e}")
 
-    print(f"\n{"=" * 60}")
+    separator = "=" * 60
+    print(f"\n{separator}")
     print("Migration complete!")
     print(f"{"=" * 60}")
     return True

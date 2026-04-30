@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from .connection import get_db
+import psycopg2
 
 
 class Person:
