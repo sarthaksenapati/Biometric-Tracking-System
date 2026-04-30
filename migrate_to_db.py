@@ -72,7 +72,7 @@ def migrate_embeddings():
     separator = "=" * 60
     print(f"\n{separator}")
     print("Migration complete!")
-    print(f"{"=" * 60}")
+    print(separator)
     return True
 
 
