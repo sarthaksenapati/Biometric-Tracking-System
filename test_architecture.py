@@ -51,7 +51,7 @@ except Exception as e:
 # ── Test 3: Message Queue ──────────────────────────────
 print("\n[3/4] Testing Message Queue...")
 try:
-    from queue import get_queue
+    from task_queue import get_queue
     q = get_queue()
     print(f"✅ Message queue initialized (type: {q.queue_type})")
     print("✅ Message queue test PASSED")

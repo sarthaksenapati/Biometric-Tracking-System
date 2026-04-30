@@ -29,7 +29,7 @@ if USE_DATABASE:
 USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
 if USE_QUEUE:
     try:
-        from queue import get_queue
+        from task_queue import get_queue
         print("[MULTI] ✅ Queue module loaded")
     except ImportError as e:
         print(f"[MULTI] ⚠️  Queue import failed: {e}")
