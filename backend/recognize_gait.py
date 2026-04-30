@@ -6,6 +6,7 @@ from models.gait_model import GaitModel
 from utils.embeddings import load_all_embeddings
 from utils.similarity import find_best_match
 
+
 def recognize_gait():
     cap = cv2.VideoCapture(0)
 
@@ -37,12 +38,9 @@ def recognize_gait():
                 emb = gait_model.extract_gait_embedding(frame_sequence[-20:])
                 person, score = find_best_match(emb, db)
 
-                cv2.putText(frame, f"{person} ({score:.2f})",
-                            (x1, y1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            0.6,
-                            (0, 0, 255),
-                            2)
+                cv2.putText(
+                    frame, f"{person} ({score:.2f})", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2
+                )
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
 

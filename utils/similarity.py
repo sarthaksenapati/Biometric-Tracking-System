@@ -10,9 +10,7 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / denom) if denom > 1e-8 else 0.0
 
 
-def find_best_match(query_embedding: np.ndarray,
-                    db: dict,
-                    threshold: float = 0.45) -> tuple[str, float]:
+def find_best_match(query_embedding: np.ndarray, db: dict, threshold: float = 0.45) -> tuple[str, float]:
     """
     Match query_embedding against a database of embeddings.
     Handles both:
@@ -26,7 +24,7 @@ def find_best_match(query_embedding: np.ndarray,
     query = query_embedding.flatten().astype(np.float32)
     query = query / (np.linalg.norm(query) + 1e-8)
 
-    best_name  = "Unknown"
+    best_name = "Unknown"
     best_score = 0.0
 
     for person_name, emb in db.items():
@@ -38,14 +36,14 @@ def find_best_match(query_embedding: np.ndarray,
             for row in emb:
                 row = row / (np.linalg.norm(row) + 1e-8)
                 scores.append(cosine_similarity(query, row))
-            score = max(scores)   # best match across all exemplars
+            score = max(scores)  # best match across all exemplars
         else:
-            emb   = emb / (np.linalg.norm(emb) + 1e-8)
+            emb = emb / (np.linalg.norm(emb) + 1e-8)
             score = cosine_similarity(query, emb)
 
         if score > best_score:
             best_score = score
-            best_name  = person_name
+            best_name = person_name
 
     if best_score < threshold:
         return "Unknown", best_score

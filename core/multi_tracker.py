@@ -8,12 +8,12 @@ import threading
 import numpy as np
 from collections import deque
 
-from models.detector   import PersonDetector
+from models.detector import PersonDetector
 from models.face_model import FaceRecognizer
 from models.reid_model import ReIDModel
 from models.gait_model import GaitModel
-from core.matcher      import Matcher
-from utils.embeddings  import save_embedding
+from core.matcher import Matcher
+from utils.embeddings import save_embedding
 
 # Database and queue support (optional)
 USE_DATABASE = os.getenv("USE_DATABASE", "true").lower() == "true"
@@ -21,6 +21,7 @@ if USE_DATABASE:
     try:
         from db.models import Event as DBEvent, Camera as DBCamera, Detection as DBDetection
         from cache import get_cache
+
         print("[MULTI] ✅ Database modules loaded")
     except ImportError as e:
         print(f"[MULTI] ⚠️  Database import failed: {e}")
@@ -30,6 +31,7 @@ USE_QUEUE = os.getenv("USE_QUEUE", "false").lower() == "true"
 if USE_QUEUE:
     try:
         from task_queue import get_queue
+
         print("[MULTI] ✅ Queue module loaded")
     except ImportError as e:
         print(f"[MULTI] ⚠️  Queue import failed: {e}")
@@ -41,6 +43,7 @@ ADMIN_CONTROL_FILE = "tracker_admin.json"
 # ─────────────────────────────────────────────────────────────────────────────
 # Helpers
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _cosine_sim(a: np.ndarray, b: np.ndarray) -> float:
     a = a.flatten().astype(np.float32)
@@ -56,7 +59,7 @@ def _clothing_histogram(crop: np.ndarray, bins: int = 32) -> np.ndarray | None:
     if h < 40 or w < 20:
         return None
     torso = crop[int(h * 0.40) : int(h * 0.80), :]
-    hsv   = cv2.cvtColor(torso, cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(torso, cv2.COLOR_BGR2HSV)
     hists = []
     for ch in range(3):
         hist = cv2.calcHist([hsv], [ch], None, [bins], [0, 256])
@@ -75,38 +78,39 @@ def _hist_sim(a, b) -> float | None:
 # Shared Identity Cache
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class SharedIdentityCache:
     THRESHOLD_WITH_FACE = 0.55
-    THRESHOLD_NO_FACE   = 0.62
-    FRESH_TTL           = 45.0
+    THRESHOLD_NO_FACE = 0.62
+    FRESH_TTL = 45.0
     _W = {"face": 0.50, "body": 0.30, "gait": 0.15, "cloth": 0.05}
 
     def __init__(self):
         self._store: dict = {}
-        self._lock  = threading.Lock()
+        self._lock = threading.Lock()
 
-    def deposit(self, name, cam_id, location, score,
-                face_emb, body_emb, gait_emb, cloth_hist):
+    def deposit(self, name, cam_id, location, score, face_emb, body_emb, gait_emb, cloth_hist):
         if name == "Unknown" or name.startswith("Person_"):
             return
         with self._lock:
             existing = self._store.get(name)
             if existing is None or score > existing["score"]:
                 self._store[name] = {
-                    "face_emb":   face_emb,
-                    "body_emb":   body_emb,
-                    "gait_emb":   gait_emb,
+                    "face_emb": face_emb,
+                    "body_emb": body_emb,
+                    "gait_emb": gait_emb,
                     "cloth_hist": cloth_hist,
-                    "score":      score,
-                    "cam_id":     cam_id,
-                    "location":   location,
-                    "timestamp":  time.time(),
+                    "score": score,
+                    "cam_id": cam_id,
+                    "location": location,
+                    "timestamp": time.time(),
                 }
-                stored = [m for m, v in [("face", face_emb), ("body", body_emb),
-                                          ("gait", gait_emb), ("cloth", cloth_hist)]
-                          if v is not None]
-                print(f"[CACHE] 💾  '{name}' updated from {location} "
-                      f"(score={score:.3f}, stored={stored})")
+                stored = [
+                    m
+                    for m, v in [("face", face_emb), ("body", body_emb), ("gait", gait_emb), ("cloth", cloth_hist)]
+                    if v is not None
+                ]
+                print(f"[CACHE] 💾  '{name}' updated from {location} " f"(score={score:.3f}, stored={stored})")
 
     def query(self, face_emb, body_emb, gait_emb, cloth_hist):
         with self._lock:
@@ -114,11 +118,11 @@ class SharedIdentityCache:
         if not store_copy:
             return None, 0.0
 
-        has_face  = face_emb is not None
+        has_face = face_emb is not None
         threshold = self.THRESHOLD_WITH_FACE if has_face else self.THRESHOLD_NO_FACE
         best_name = None
-        best_sim  = 0.0
-        now       = time.time()
+        best_sim = 0.0
+        now = time.time()
 
         for name, entry in store_copy.items():
             sims, weights = [], []
@@ -142,7 +146,7 @@ class SharedIdentityCache:
             if age > self.FRESH_TTL:
                 combined *= max(0.70, 1.0 - 0.004 * (age - self.FRESH_TTL))
             if combined > best_sim:
-                best_sim  = combined
+                best_sim = combined
                 best_name = name
 
         if best_sim >= threshold:
@@ -159,16 +163,18 @@ class SharedIdentityCache:
             store_copy = dict(self._store)
         if not store_copy:
             return "cache empty"
-        now   = time.time()
+        now = time.time()
         parts = []
         for name, e in store_copy.items():
             age = now - e["timestamp"]
-            tag = "".join([
-                "F" if e["face_emb"]   is not None else "_",
-                "B" if e["body_emb"]   is not None else "_",
-                "G" if e["gait_emb"]   is not None else "_",
-                "C" if e["cloth_hist"] is not None else "_",
-            ])
+            tag = "".join(
+                [
+                    "F" if e["face_emb"] is not None else "_",
+                    "B" if e["body_emb"] is not None else "_",
+                    "G" if e["gait_emb"] is not None else "_",
+                    "C" if e["cloth_hist"] is not None else "_",
+                ]
+            )
             parts.append(f"{name}[{tag}]({age:.0f}s)")
         return " | ".join(parts)
 
@@ -176,6 +182,7 @@ class SharedIdentityCache:
 # ─────────────────────────────────────────────────────────────────────────────
 # Auto Enroller
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 class AutoEnroller:
     """
@@ -207,16 +214,16 @@ class AutoEnroller:
 
     MATCH_WITH_FACE = 0.68
     MATCH_BODY_ONLY = 0.78
-    FACE_TARGET     = 12
-    BODY_TARGET     = 12
-    NAMES_FILE      = "unknown_persons.json"
+    FACE_TARGET = 12
+    BODY_TARGET = 12
+    NAMES_FILE = "unknown_persons.json"
 
     def __init__(self, matcher: "Matcher"):
-        self._matcher   = matcher
-        self._counter   = 0
-        self._lock      = threading.Lock()
-        self._candidates: dict = {}   # label → candidate dict
-        self._track_map:  dict = {}   # (cam_id, track_id) → label
+        self._matcher = matcher
+        self._counter = 0
+        self._lock = threading.Lock()
+        self._candidates: dict = {}  # label → candidate dict
+        self._track_map: dict = {}  # (cam_id, track_id) → label
         self._name_overrides: dict = {}  # label → display_name from JSON
 
         self._load_names()
@@ -251,8 +258,10 @@ class AutoEnroller:
                     self._candidates[label]["display_name"] = display_name
 
             if data:
-                print(f"[AutoEnroller] Loaded {len(data)} name overrides "
-                      f"from {self.NAMES_FILE} (counter={self._counter})")
+                print(
+                    f"[AutoEnroller] Loaded {len(data)} name overrides "
+                    f"from {self.NAMES_FILE} (counter={self._counter})"
+                )
         except Exception as e:
             print(f"[AutoEnroller] Could not load names: {e}")
 
@@ -282,8 +291,7 @@ class AutoEnroller:
             if label not in self._candidates:
                 # Candidate not in memory yet — save override for when it appears
                 self._save_names()
-                print(f"[AutoEnroller] ✏️  Name override saved: "
-                      f"'{label}' → '{new_name}'")
+                print(f"[AutoEnroller] ✏️  Name override saved: " f"'{label}' → '{new_name}'")
                 return True
 
             old_name = self._candidates[label]["display_name"]
@@ -314,22 +322,24 @@ class AutoEnroller:
 
     def list_persons(self) -> list:
         with self._lock:
-            now    = time.time()
+            now = time.time()
             result = []
             for label, c in self._candidates.items():
                 age = (now - c["last_seen"]) if c["last_seen"] else None
-                result.append({
-                    "label":          label,
-                    "display_name":   c["display_name"],
-                    "sighting_count": c["sighting_count"],
-                    "face_collected": len(c["face_embs"]),
-                    "body_collected": len(c["body_embs"]),
-                    "face_target":    self.FACE_TARGET,
-                    "body_target":    self.BODY_TARGET,
-                    "promoted":       c["promoted"],
-                    "age_s":          round(age, 1) if age else None,
-                    "cam_id":         c["cam_id"],
-                })
+                result.append(
+                    {
+                        "label": label,
+                        "display_name": c["display_name"],
+                        "sighting_count": c["sighting_count"],
+                        "face_collected": len(c["face_embs"]),
+                        "body_collected": len(c["body_embs"]),
+                        "face_target": self.FACE_TARGET,
+                        "body_target": self.BODY_TARGET,
+                        "promoted": c["promoted"],
+                        "age_s": round(age, 1) if age else None,
+                        "cam_id": c["cam_id"],
+                    }
+                )
         return result
 
     def reset(self):
@@ -337,7 +347,7 @@ class AutoEnroller:
         with self._lock:
             self._candidates.clear()
             self._track_map.clear()
-            self._counter   = 0
+            self._counter = 0
             self._name_overrides.clear()
         if os.path.exists(self.NAMES_FILE):
             os.remove(self.NAMES_FILE)
@@ -345,20 +355,21 @@ class AutoEnroller:
 
     # ── Internal: find best candidate match ───────────────────────────────────
 
-    def _best_candidate_match(self,
-                               face_emb: np.ndarray | None,
-                               body_emb: np.ndarray | None,
-                               ) -> tuple[str | None, float]:
+    def _best_candidate_match(
+        self,
+        face_emb: np.ndarray | None,
+        body_emb: np.ndarray | None,
+    ) -> tuple[str | None, float]:
         """
         Find the best matching existing candidate.
         Only candidates with at least one embedding are considered —
         ghost candidates (empty stacks) are automatically excluded.
         """
-        has_face  = face_emb is not None
+        has_face = face_emb is not None
         threshold = self.MATCH_WITH_FACE if has_face else self.MATCH_BODY_ONLY
 
         best_label = None
-        best_sim   = 0.0
+        best_sim = 0.0
 
         for label, c in self._candidates.items():
             rep_face = None
@@ -390,7 +401,7 @@ class AutoEnroller:
 
             combined = sum(s * w for s, w in zip(sims, weights)) / sum(weights)
             if combined > best_sim:
-                best_sim   = combined
+                best_sim = combined
                 best_label = label
 
         if best_sim >= threshold:
@@ -399,17 +410,18 @@ class AutoEnroller:
 
     # ── Main entry ────────────────────────────────────────────────────────────
 
-    def query_or_enroll(self,
-                        cam_id:   int,
-                        track_id: int,
-                        face_emb: np.ndarray | None,
-                        body_emb: np.ndarray | None,
-                        ) -> tuple[str, float]:
+    def query_or_enroll(
+        self,
+        cam_id: int,
+        track_id: int,
+        face_emb: np.ndarray | None,
+        body_emb: np.ndarray | None,
+    ) -> tuple[str, float]:
         if face_emb is None and body_emb is None:
             return "Unknown", 0.0
 
         track_key = (cam_id, track_id)
-        now       = time.time()
+        now = time.time()
 
         with self._lock:
             # ── Step 1: look up existing track assignment ─────────────────
@@ -421,8 +433,7 @@ class AutoEnroller:
 
                 if label is not None:
                     self._track_map[track_key] = label
-                    print(f"[AutoEnroller] 🔗 Cam{cam_id} track={track_id} → "
-                          f"'{label}' re-linked (sim={sim:.3f})")
+                    print(f"[AutoEnroller] 🔗 Cam{cam_id} track={track_id} → " f"'{label}' re-linked (sim={sim:.3f})")
                 else:
                     # ── Step 3: create new candidate ──────────────────────
                     self._counter += 1
@@ -432,24 +443,26 @@ class AutoEnroller:
                     display_name = self._name_overrides.get(label, label)
 
                     self._candidates[label] = {
-                        "face_embs":      [],
-                        "body_embs":      [],
-                        "display_name":   display_name,
-                        "promoted":       False,
-                        "first_seen":     now,
-                        "last_seen":      now,
+                        "face_embs": [],
+                        "body_embs": [],
+                        "display_name": display_name,
+                        "promoted": False,
+                        "first_seen": now,
+                        "last_seen": now,
                         "sighting_count": 0,
-                        "cam_id":         cam_id,
+                        "cam_id": cam_id,
                     }
                     self._track_map[track_key] = label
                     self._save_names()
-                    print(f"[AutoEnroller] 🆕 New candidate '{label}' "
-                          f"({display_name}) from Cam{cam_id} track={track_id}")
+                    print(
+                        f"[AutoEnroller] 🆕 New candidate '{label}' "
+                        f"({display_name}) from Cam{cam_id} track={track_id}"
+                    )
 
             c = self._candidates[label]
-            c["last_seen"]       = now
+            c["last_seen"] = now
             c["sighting_count"] += 1
-            c["cam_id"]          = cam_id
+            c["cam_id"] = cam_id
 
             # ── Step 4: collect embeddings ────────────────────────────────
             if not c["promoted"]:
@@ -461,16 +474,18 @@ class AutoEnroller:
                 f_n = len(c["face_embs"])
                 b_n = len(c["body_embs"])
 
-                print(f"[AutoEnroller] ⏳ '{label}' ({c['display_name']}) "
-                      f"face={f_n}/{self.FACE_TARGET} "
-                      f"body={b_n}/{self.BODY_TARGET}")
+                print(
+                    f"[AutoEnroller] ⏳ '{label}' ({c['display_name']}) "
+                    f"face={f_n}/{self.FACE_TARGET} "
+                    f"body={b_n}/{self.BODY_TARGET}"
+                )
 
                 # ── Step 5: promote when both stacks full ─────────────────
                 if f_n >= self.FACE_TARGET and b_n >= self.BODY_TARGET:
                     self._promote(label, c)
 
             display_name = c["display_name"]
-            score        = 0.6 if c["promoted"] else 0.5
+            score = 0.6 if c["promoted"] else 0.5
 
         return display_name, score
 
@@ -478,19 +493,20 @@ class AutoEnroller:
 
     def _promote(self, label: str, c: dict):
         display_name = c["display_name"]
-        face_stack   = np.stack(c["face_embs"])
-        body_stack   = np.stack(c["body_embs"])
+        face_stack = np.stack(c["face_embs"])
+        body_stack = np.stack(c["body_embs"])
         try:
             save_embedding(display_name, face_stack, "face")
             save_embedding(display_name, body_stack, "body")
             c["promoted"] = True
             self._save_names()
             self._matcher.reload()
-            print(f"[AutoEnroller] ✅ '{label}' ({display_name}) PROMOTED → "
-                  f"embeddings_db/  face={face_stack.shape} body={body_stack.shape}")
+            print(
+                f"[AutoEnroller] ✅ '{label}' ({display_name}) PROMOTED → "
+                f"embeddings_db/  face={face_stack.shape} body={body_stack.shape}"
+            )
             print(f"[AutoEnroller]    '{display_name}' now shows as green box")
-            print(f"[AutoEnroller]    To rename: "
-                  f"python -m utils.admin_controls rename {label} NewName")
+            print(f"[AutoEnroller]    To rename: " f"python -m utils.admin_controls rename {label} NewName")
         except Exception as e:
             print(f"[AutoEnroller] ❌ Promotion failed for '{label}': {e}")
 
@@ -504,8 +520,10 @@ class AutoEnroller:
             f_n = len(c["face_embs"])
             b_n = len(c["body_embs"])
             if f_n < min_samples or b_n < min_samples:
-                print(f"[AutoEnroller] Not enough samples to force promote "
-                      f"'{label}' (face={f_n}/{min_samples}, body={b_n}/{min_samples})")
+                print(
+                    f"[AutoEnroller] Not enough samples to force promote "
+                    f"'{label}' (face={f_n}/{min_samples}, body={b_n}/{min_samples})"
+                )
                 return False
             self._promote(label, c)
         return True
@@ -516,10 +534,12 @@ class AutoEnroller:
                 return "none"
             parts = []
             for label, c in self._candidates.items():
-                dn   = c["display_name"]
-                prom = "✓" if c["promoted"] else \
-                    f"F{len(c['face_embs'])}/{self.FACE_TARGET}" \
-                    f"·B{len(c['body_embs'])}/{self.BODY_TARGET}"
+                dn = c["display_name"]
+                prom = (
+                    "✓"
+                    if c["promoted"]
+                    else f"F{len(c['face_embs'])}/{self.FACE_TARGET}" f"·B{len(c['body_embs'])}/{self.BODY_TARGET}"
+                )
                 parts.append(f"{dn}[{prom}]")
             return " | ".join(parts)
 
@@ -528,13 +548,14 @@ class AutoEnroller:
 # Global Identity Manager
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class GlobalIdentityManager:
-    RETENTION_SECONDS   = 300
+    RETENTION_SECONDS = 300
     SIGHTING_DEBOUNCE_S = 2.0
 
     def __init__(self, cam_locations: dict):
-        self.cam_locations   = cam_locations
-        self.registry:  dict = {}
+        self.cam_locations = cam_locations
+        self.registry: dict = {}
         self.event_log: list = []  # In-memory fallback
         self._last_sighting: dict = {}
         self._lock = threading.Lock()
@@ -548,22 +569,21 @@ class GlobalIdentityManager:
         if person_name == "Unknown":
             return
         location = self._loc(cam_id)
-        now      = time.time()
+        now = time.time()
         with self._lock:
             prev = self.registry.get(person_name)
             if prev and prev["cam_id"] != cam_id:
                 elapsed = now - prev["last_seen"]
                 if elapsed > 1.5:
                     prev_loc = self._loc(prev["cam_id"])
-                    print(f"[HANDOFF] {person_name}  "
-                          f"{prev_loc} → {location}  ({elapsed:.1f}s gap)")
+                    print(f"[HANDOFF] {person_name}  " f"{prev_loc} → {location}  ({elapsed:.1f}s gap)")
                     event_data = {
-                        "type":      "handoff",
-                        "person":    person_name,
-                        "from_loc":  prev_loc,
-                        "to_loc":    location,
-                        "from_cam":  prev["cam_id"],
-                        "to_cam":    cam_id,
+                        "type": "handoff",
+                        "person": person_name,
+                        "from_loc": prev_loc,
+                        "to_loc": location,
+                        "from_cam": prev["cam_id"],
+                        "to_cam": cam_id,
                         "elapsed_s": round(elapsed, 1),
                         "timestamp": now,
                     }
@@ -576,31 +596,28 @@ class GlobalIdentityManager:
                     else:
                         self.event_log.append(event_data)
             self.registry[person_name] = {
-                "cam_id":     cam_id,
-                "location":   location,
-                "track_id":   track_id,
-                "last_seen":  now,
+                "cam_id": cam_id,
+                "location": location,
+                "track_id": track_id,
+                "last_seen": now,
                 "confidence": round(confidence, 3),
             }
             last = self._last_sighting.get(person_name, 0)
             if now - last >= self.SIGHTING_DEBOUNCE_S:
                 self._last_sighting[person_name] = now
                 event_data = {
-                    "type":       "sighting",
-                    "person":     person_name,
-                    "location":   location,
-                    "cam_id":     cam_id,
+                    "type": "sighting",
+                    "person": person_name,
+                    "location": location,
+                    "cam_id": cam_id,
                     "confidence": round(confidence, 3),
-                    "timestamp":  now,
+                    "timestamp": now,
                 }
                 if self._use_db:
                     try:
                         DBEvent.log(**event_data)
                         # Also save detection
-                        DBDetection.save(
-                            person_name, cam_id, track_id,
-                            confidence, [], location, now
-                        )
+                        DBDetection.save(person_name, cam_id, track_id, confidence, [], location, now)
                     except Exception as e:
                         print(f"[IDENTITY] DB log failed: {e}")
                         self.event_log.append(event_data)
@@ -614,8 +631,7 @@ class GlobalIdentityManager:
     def evict_stale_people(self):
         cutoff = time.time() - self.RETENTION_SECONDS
         with self._lock:
-            stale = [n for n, info in self.registry.items()
-                     if info["last_seen"] < cutoff]
+            stale = [n for n, info in self.registry.items() if info["last_seen"] < cutoff]
             for n in stale:
                 print(f"[IDENTITY] 🗑️  '{n}' evicted")
                 del self.registry[n]
@@ -654,26 +670,23 @@ class GlobalIdentityManager:
     def active_people(self) -> list:
         cutoff = time.time() - self.RETENTION_SECONDS
         with self._lock:
-            return [
-                {"name": name, **info}
-                for name, info in self.registry.items()
-                if info["last_seen"] >= cutoff
-            ]
+            return [{"name": name, **info} for name, info in self.registry.items() if info["last_seen"] >= cutoff]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Per-camera frame capture thread
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class CameraReader(threading.Thread):
     def __init__(self, cam_id, cap, loc_name):
         super().__init__(daemon=True, name=f"CamReader-{cam_id}")
-        self.cam_id   = cam_id
-        self.cap      = cap
+        self.cam_id = cam_id
+        self.cap = cap
         self.loc_name = loc_name
         self._frame: np.ndarray | None = None
-        self._lock  = threading.Lock()
-        self._stop  = threading.Event()
+        self._lock = threading.Lock()
+        self._stop = threading.Event()
         self.online = cap.isOpened()
 
     def run(self):
@@ -697,7 +710,7 @@ class CameraReader(threading.Thread):
 
     def replace_cap(self, new_cap):
         with self._lock:
-            self.cap    = new_cap
+            self.cap = new_cap
             self._frame = None
         self.online = new_cap.isOpened()
 
@@ -709,27 +722,26 @@ class CameraReader(threading.Thread):
 # Multi-Camera Tracker
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 class MultiCameraTracker:
 
-    GAIT_BUFFER_SIZE        = 10
-    PRED_BUFFER_SIZE        = 7
-    RETRY_INTERVAL          = 3.0
+    GAIT_BUFFER_SIZE = 10
+    PRED_BUFFER_SIZE = 7
+    RETRY_INTERVAL = 3.0
     CACHE_DEPOSIT_THRESHOLD = 0.55
-    PROCESS_EVERY_N_FRAMES  = 2
+    PROCESS_EVERY_N_FRAMES = 2
 
     def __init__(self, cam_sources: dict, cam_locations: dict = None):
         print("\n[MULTI] Loading shared models...")
-        self.detector   = PersonDetector()
+        self.detector = PersonDetector()
         self.face_model = FaceRecognizer()
         self.reid_model = ReIDModel()
         self.gait_model = GaitModel()
-        self.matcher    = Matcher()
+        self.matcher = Matcher()
         print("[MULTI] Models ready.\n")
 
-        self.cam_sources   = cam_sources
-        self.cam_locations = cam_locations or {
-            cid: f"Cam{cid}" for cid in cam_sources
-        }
+        self.cam_sources = cam_sources
+        self.cam_locations = cam_locations or {cid: f"Cam{cid}" for cid in cam_sources}
 
         print("[MULTI] Camera → Location mapping:")
         for cid, loc in self.cam_locations.items():
@@ -738,26 +750,26 @@ class MultiCameraTracker:
         print()
 
         self.identity_manager = GlobalIdentityManager(self.cam_locations)
-        self.id_cache         = SharedIdentityCache()
-        self.auto_enroller    = AutoEnroller(self.matcher)
+        self.id_cache = SharedIdentityCache()
+        self.auto_enroller = AutoEnroller(self.matcher)
 
-        self._last_retry:     dict = {}
-        self.cameras:         dict = {}
-        self._readers:        dict = {}
-        self.gait_buffers:    dict = {}
-        self.pred_buffers:    dict = {}
-        self._last_results:   dict = {}
+        self._last_retry: dict = {}
+        self.cameras: dict = {}
+        self._readers: dict = {}
+        self.gait_buffers: dict = {}
+        self.pred_buffers: dict = {}
+        self._last_results: dict = {}
         self._frame_counters: dict = {}
-        self._frame_buffer:   dict = {}
+        self._frame_buffer: dict = {}
         self._frame_buffer_lock = threading.Lock()
-        self._stop_event  = threading.Event()
+        self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
 
         for cam_id, source in cam_sources.items():
             cap = self._open_camera(cam_id, source)
-            self.cameras[cam_id]         = cap
-            self._readers[cam_id]        = CameraReader(cam_id, cap, self._loc(cam_id))
-            self._last_results[cam_id]   = []
+            self.cameras[cam_id] = cap
+            self._readers[cam_id] = CameraReader(cam_id, cap, self._loc(cam_id))
+            self._last_results[cam_id] = []
             self._frame_counters[cam_id] = 0
             self._readers[cam_id].start()
 
@@ -779,8 +791,7 @@ class MultiCameraTracker:
             if cap.isOpened():
                 print(f"[MULTI] ✅ '{loc}' opened  (source={source})")
             else:
-                print(f"[MULTI] ❌ '{loc}' unavailable — will retry every "
-                      f"{self.RETRY_INTERVAL:.0f}s")
+                print(f"[MULTI] ❌ '{loc}' unavailable — will retry every " f"{self.RETRY_INTERVAL:.0f}s")
         except Exception as e:
             print(f"[MULTI] ❌ '{loc}' error: {e}")
             cap = cv2.VideoCapture()
@@ -848,7 +859,7 @@ class MultiCameraTracker:
                 self.id_cache.clear()
 
             elif action == "rename":
-                label    = cmd.get("label", "")
+                label = cmd.get("label", "")
                 new_name = cmd.get("new_name", "")
                 if label and new_name:
                     self.auto_enroller.rename(label, new_name)
@@ -871,14 +882,19 @@ class MultiCameraTracker:
                 else:
                     print("\n[ADMIN] Current enrolling persons:")
                     for p in persons:
-                        status = "PROMOTED ✅" if p["promoted"] else \
-                            f"face={p['face_collected']}/{p['face_target']} " \
+                        status = (
+                            "PROMOTED ✅"
+                            if p["promoted"]
+                            else f"face={p['face_collected']}/{p['face_target']} "
                             f"body={p['body_collected']}/{p['body_target']}"
-                        print(f"  {p['label']:12s} → '{p['display_name']:15s}' "
-                              f"[{status}] "
-                              f"seen={p['sighting_count']} "
-                              f"age={p['age_s']}s "
-                              f"cam={p['cam_id']}")
+                        )
+                        print(
+                            f"  {p['label']:12s} → '{p['display_name']:15s}' "
+                            f"[{status}] "
+                            f"seen={p['sighting_count']} "
+                            f"age={p['age_s']}s "
+                            f"cam={p['cam_id']}"
+                        )
                     print()
 
             else:
@@ -895,16 +911,18 @@ class MultiCameraTracker:
 
     def process_frame(self, frame, cam_id) -> list:
         detections = self.detector.detect(frame)
-        results    = []
-        loc        = self._loc(cam_id)
+        results = []
+        loc = self._loc(cam_id)
 
         for idx, det in enumerate(detections):
-            track_id        = det.get("track_id") or idx
+            track_id = det.get("track_id") or idx
             x1, y1, x2, y2 = det["bbox"]
-            h, w            = frame.shape[:2]
-            pad             = 10
-            x1 = max(0, x1 - pad);  y1 = max(0, y1 - pad)
-            x2 = min(w, x2 + pad);  y2 = min(h, y2 + pad)
+            h, w = frame.shape[:2]
+            pad = 10
+            x1 = max(0, x1 - pad)
+            y1 = max(0, y1 - pad)
+            x2 = min(w, x2 + pad)
+            y2 = min(h, y2 + pad)
 
             person_crop = frame[y1:y2, x1:x2]
             if person_crop.size == 0:
@@ -935,7 +953,7 @@ class MultiCameraTracker:
                 except Exception as e:
                     print(f"[{loc}] gait error: {e}")
 
-            cloth_hist   = _clothing_histogram(person_crop)
+            cloth_hist = _clothing_histogram(person_crop)
             face_visible = face_emb is not None
 
             print(
@@ -954,9 +972,7 @@ class MultiCameraTracker:
             )
 
             # ── Step 2: Cache ─────────────────────────────────────────────
-            cache_name, cache_sim = self.id_cache.query(
-                face_emb, body_emb, gait_emb, cloth_hist
-            )
+            cache_name, cache_sim = self.id_cache.query(face_emb, body_emb, gait_emb, cloth_hist)
 
             # ── Step 3: Resolve identity ──────────────────────────────────
             if matcher_name != "Unknown":
@@ -965,47 +981,39 @@ class MultiCameraTracker:
             elif cache_name is not None:
                 name, score, source_tag = cache_name, cache_sim, "cache"
                 view_note = " (no face)" if not face_visible else ""
-                print(f"[CACHE] 🎯 {loc} track={track_id} → '{name}' "
-                      f"(sim={cache_sim:.3f}){view_note}")
+                print(f"[CACHE] 🎯 {loc} track={track_id} → '{name}' " f"(sim={cache_sim:.3f}){view_note}")
 
             else:
                 # ── Step 4: Auto-enroller ─────────────────────────────────
-                enroll_name, enroll_score = self.auto_enroller.query_or_enroll(
-                    cam_id, track_id, face_emb, body_emb
-                )
+                enroll_name, enroll_score = self.auto_enroller.query_or_enroll(cam_id, track_id, face_emb, body_emb)
                 if enroll_name != "Unknown":
                     name, score, source_tag = enroll_name, enroll_score, "enrolling"
                 else:
                     name, score, source_tag = "Unknown", 0.0, "none"
 
             # ── Step 5: Cache deposit (known persons only) ────────────────
-            if name != "Unknown" \
-                    and source_tag in ("matcher", "cache") \
-                    and score >= self.CACHE_DEPOSIT_THRESHOLD:
-                self.id_cache.deposit(
-                    name, cam_id, loc, score,
-                    face_emb, body_emb, gait_emb, cloth_hist
-                )
+            if name != "Unknown" and source_tag in ("matcher", "cache") and score >= self.CACHE_DEPOSIT_THRESHOLD:
+                self.id_cache.deposit(name, cam_id, loc, score, face_emb, body_emb, gait_emb, cloth_hist)
 
             # ── Smooth predictions ────────────────────────────────────────
             pred_buf = self._pred_buf(cam_id, track_id)
             pred_buf.append(name)
             final_name = max(set(pred_buf), key=pred_buf.count)
 
-            self.identity_manager.update(
-                final_name, cam_id, track_id, confidence=score
-            )
+            self.identity_manager.update(final_name, cam_id, track_id, confidence=score)
 
-            results.append({
-                "bbox":         (x1, y1, x2, y2),
-                "name":         final_name,
-                "score":        score,
-                "track_id":     track_id,
-                "cam_id":       cam_id,
-                "location":     loc,
-                "source_tag":   source_tag,
-                "face_visible": face_visible,
-            })
+            results.append(
+                {
+                    "bbox": (x1, y1, x2, y2),
+                    "name": final_name,
+                    "score": score,
+                    "track_id": track_id,
+                    "cam_id": cam_id,
+                    "location": loc,
+                    "source_tag": source_tag,
+                    "face_visible": face_visible,
+                }
+            )
 
         return results
 
@@ -1013,15 +1021,14 @@ class MultiCameraTracker:
 
     def draw_results(self, frame, results, cam_id) -> np.ndarray:
         loc = self._loc(cam_id)
-        cv2.putText(frame, loc, (10, 25),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 0), 2)
+        cv2.putText(frame, loc, (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 0), 2)
 
         for res in results:
             x1, y1, x2, y2 = res["bbox"]
-            name    = res["name"]
-            score   = res["score"]
-            tid     = res["track_id"]
-            src     = res.get("source_tag", "")
+            name = res["name"]
+            score = res["score"]
+            tid = res["track_id"]
+            src = res.get("source_tag", "")
             no_face = not res.get("face_visible", True)
 
             if name == "Unknown":
@@ -1034,29 +1041,35 @@ class MultiCameraTracker:
                 color = (0, 255, 0)
 
             label = f"[{tid}] {name} ({score:.2f})"
-            if src == "cache":     label += " [C]"
-            if src == "enrolling": label += " [~]"
-            if no_face and name != "Unknown": label += " [rear/side]"
+            if src == "cache":
+                label += " [C]"
+            if src == "enrolling":
+                label += " [~]"
+            if no_face and name != "Unknown":
+                label += " [rear/side]"
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(frame, label, (x1, max(y1 - 10, 15)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.52, color, 2)
+            cv2.putText(frame, label, (x1, max(y1 - 10, 15)), cv2.FONT_HERSHEY_SIMPLEX, 0.52, color, 2)
 
         return frame
 
     def _no_signal_panel(self, cam_id, w, h) -> np.ndarray:
-        loc   = self._loc(cam_id)
+        loc = self._loc(cam_id)
         panel = np.zeros((h, w, 3), dtype=np.uint8)
         for i in range(0, h, 40):
             cv2.line(panel, (0, i), (w, i), (30, 30, 30), 1)
         for j in range(0, w, 40):
             cv2.line(panel, (j, 0), (j, h), (30, 30, 30), 1)
-        cv2.putText(panel, loc,
-                    (w // 2 - 80, h // 2 - 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, (80, 80, 80), 2)
-        cv2.putText(panel, "NO SIGNAL — retrying...",
-                    (w // 2 - 145, h // 2 + 20),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 80, 200), 2)
+        cv2.putText(panel, loc, (w // 2 - 80, h // 2 - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (80, 80, 80), 2)
+        cv2.putText(
+            panel,
+            "NO SIGNAL — retrying...",
+            (w // 2 - 145, h // 2 + 20),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 80, 200),
+            2,
+        )
         return panel
 
     # ── Dashboard API ─────────────────────────────────────────────────────────
@@ -1067,17 +1080,18 @@ class MultiCameraTracker:
                 return cap is not None and cap.isOpened()
             except Exception:
                 return False
+
         return {
-            "active_people":     self.identity_manager.active_people(),
-            "events":            self.identity_manager.recent_events(50),
+            "active_people": self.identity_manager.active_people(),
+            "events": self.identity_manager.recent_events(50),
             "enrolling_persons": self.auto_enroller.list_persons(),
             "cameras": [
                 {
-                    "cam_id":   cid,
+                    "cam_id": cid,
                     "location": self._loc(cid),
-                    "online":   self._readers[cid].online
-                               if cid in self._readers
-                               else _safe_opened(self.cameras.get(cid)),
+                    "online": (
+                        self._readers[cid].online if cid in self._readers else _safe_opened(self.cameras.get(cid))
+                    ),
                 }
                 for cid in sorted(self.cam_sources.keys())
             ],
@@ -1132,13 +1146,13 @@ class MultiCameraTracker:
     # ── Core inference loop ───────────────────────────────────────────────────
 
     def _run_loop(self, display: bool = False):
-        DISPLAY_W     = 640
-        DISPLAY_H     = 480
+        DISPLAY_W = 640
+        DISPLAY_H = 480
         evict_counter = 0
         admin_counter = 0
 
         while not self._stop_event.is_set():
-            frames:      dict = {}
+            frames: dict = {}
             all_results: dict = {}
 
             # Check admin commands every ~10 iterations
@@ -1156,16 +1170,12 @@ class MultiCameraTracker:
                 frame = reader.get_latest() if reader else None
 
                 if frame is None:
-                    frames[cam_id]      = self._no_signal_panel(cam_id, DISPLAY_W, DISPLAY_H)
+                    frames[cam_id] = self._no_signal_panel(cam_id, DISPLAY_W, DISPLAY_H)
                     all_results[cam_id] = self._last_results.get(cam_id, [])
                     continue
 
-                self._frame_counters[cam_id] = (
-                    self._frame_counters.get(cam_id, 0) + 1
-                )
-                run_inference = (
-                    self._frame_counters[cam_id] % self.PROCESS_EVERY_N_FRAMES == 0
-                )
+                self._frame_counters[cam_id] = self._frame_counters.get(cam_id, 0) + 1
+                run_inference = self._frame_counters[cam_id] % self.PROCESS_EVERY_N_FRAMES == 0
 
                 if run_inference:
                     results = self.process_frame(frame, cam_id)
@@ -1173,8 +1183,8 @@ class MultiCameraTracker:
                 else:
                     results = self._last_results.get(cam_id, [])
 
-                frame               = self.draw_results(frame.copy(), results, cam_id)
-                frames[cam_id]      = frame
+                frame = self.draw_results(frame.copy(), results, cam_id)
+                frames[cam_id] = frame
                 all_results[cam_id] = results
 
             with self._frame_buffer_lock:
@@ -1189,27 +1199,31 @@ class MultiCameraTracker:
             if not display:
                 continue
 
-            panels = [
-                cv2.resize(frames[cid], (DISPLAY_W, DISPLAY_H))
-                for cid in sorted(frames.keys())
-            ]
+            panels = [cv2.resize(frames[cid], (DISPLAY_W, DISPLAY_H)) for cid in sorted(frames.keys())]
             if len(panels) > 1:
-                div    = np.zeros((DISPLAY_H, 4, 3), dtype=np.uint8)
+                div = np.zeros((DISPLAY_H, 4, 3), dtype=np.uint8)
                 div[:] = (255, 255, 0)
                 combined = np.hstack([panels[0], div] + panels[1:])
             else:
                 combined = panels[0]
 
-            bar_h  = 64
-            bar    = np.zeros((bar_h, combined.shape[1], 3), dtype=np.uint8)
-            cv2.putText(bar, self.identity_manager.status_str(),
-                        (8, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (200, 200, 200), 1)
-            cv2.putText(bar,
-                        f"Cache: {self.id_cache.summary()}",
-                        (8, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (80, 200, 255), 1)
-            cv2.putText(bar,
-                        f"Enrolling: {self.auto_enroller.summary()}",
-                        (8, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (255, 255, 0), 1)
+            bar_h = 64
+            bar = np.zeros((bar_h, combined.shape[1], 3), dtype=np.uint8)
+            cv2.putText(
+                bar, self.identity_manager.status_str(), (8, 14), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (200, 200, 200), 1
+            )
+            cv2.putText(
+                bar, f"Cache: {self.id_cache.summary()}", (8, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (80, 200, 255), 1
+            )
+            cv2.putText(
+                bar,
+                f"Enrolling: {self.auto_enroller.summary()}",
+                (8, 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.38,
+                (255, 255, 0),
+                1,
+            )
             combined = np.vstack([combined, bar])
 
             cv2.imshow("Multi-Camera Biometric Tracker", combined)

@@ -6,6 +6,7 @@ import cv2
 try:
     import insightface
     from insightface.app import FaceAnalysis
+
     INSIGHTFACE_AVAILABLE = True
 except ImportError:
     INSIGHTFACE_AVAILABLE = False
@@ -23,22 +24,21 @@ class FaceRecognizer:
             # InsightFace loads any model so every session gets CUDA forced in.
             _original_session_init = ort.InferenceSession.__init__
 
-            def _force_cuda_init(self_session, model_path, sess_options=None,
-                                 providers=None, provider_options=None, **kwargs):
+            def _force_cuda_init(
+                self_session, model_path, sess_options=None, providers=None, provider_options=None, **kwargs
+            ):
                 _original_session_init(
-                    self_session, model_path,
+                    self_session,
+                    model_path,
                     sess_options=sess_options,
                     providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
                     provider_options=provider_options,
-                    **kwargs
+                    **kwargs,
                 )
 
             ort.InferenceSession.__init__ = _force_cuda_init
 
-            self.app = FaceAnalysis(
-                name="buffalo_sc",
-                providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
-            )
+            self.app = FaceAnalysis(name="buffalo_sc", providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
             # ctx_id=0 = GPU 0 (RTX 4060)
             self.app.prepare(ctx_id=0, det_size=(320, 320))
 
@@ -48,7 +48,7 @@ class FaceRecognizer:
             # Verify which provider was actually loaded
             active = []
             for model in self.app.models.values():
-                if hasattr(model, 'session'):
+                if hasattr(model, "session"):
                     active += model.session.get_providers()
             if active:
                 providers_used = list(set(active))
@@ -61,6 +61,7 @@ class FaceRecognizer:
             print("[FaceModel] Using InsightFace (better at distance)")
         else:
             from deepface import DeepFace
+
             self.DeepFace = DeepFace
             self.backend = "deepface"
             print("[FaceModel] Using DeepFace FaceNet (limited at distance)")
@@ -87,7 +88,7 @@ class FaceRecognizer:
                 return None
 
             # Pick the largest face in the crop
-            largest = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
+            largest = max(faces, key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1]))
             embedding = np.array(largest.embedding, dtype=np.float32)
 
             norm = np.linalg.norm(embedding)
@@ -101,11 +102,7 @@ class FaceRecognizer:
 
     def _deepface_embedding(self, img):
         try:
-            result = self.app.represent(
-                img,
-                model_name="Facenet",
-                enforce_detection=False
-            )
+            result = self.app.represent(img, model_name="Facenet", enforce_detection=False)
             if not result:
                 return None
             embedding = np.array(result[0]["embedding"], dtype=np.float32)

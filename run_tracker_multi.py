@@ -22,6 +22,7 @@ USE_DATABASE = os.getenv("USE_DATABASE", "true").lower() == "true"
 if USE_DATABASE:
     try:
         from db.connection import init_db
+
         init_db()
         print("[MAIN] ✅ Database initialized")
     except Exception as e:
@@ -29,18 +30,19 @@ if USE_DATABASE:
         print("[MAIN] Continuing with file-based storage...")
 
 from core.multi_tracker import MultiCameraTracker
-from config import CAMERA_SOURCES, CAMERA_LOCATIONS   # ← all camera config lives here
+from config import CAMERA_SOURCES, CAMERA_LOCATIONS  # ← all camera config lives here
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
 # ─────────────────────────────────────────────────────────────────────────────
 
-STATE_WRITE_INTERVAL = 1          # seconds between dashboard state writes
-STATE_FILE           = "tracker_state.json"
+STATE_WRITE_INTERVAL = 1  # seconds between dashboard state writes
+STATE_FILE = "tracker_state.json"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # State writer — background thread, writes JSON for Streamlit dashboard
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def state_writer(tracker: MultiCameraTracker, stop_event: threading.Event):
     """
@@ -50,7 +52,7 @@ def state_writer(tracker: MultiCameraTracker, stop_event: threading.Event):
     while not stop_event.is_set():
         try:
             data = tracker.get_structured_data()
-            data["written_at"]    = time.time()
+            data["written_at"] = time.time()
             data["retention_min"] = tracker.identity_manager.RETENTION_SECONDS // 60
 
             with open(STATE_FILE, "w", encoding="utf-8") as f:
@@ -60,6 +62,7 @@ def state_writer(tracker: MultiCameraTracker, stop_event: threading.Event):
             print(f"[STATE] ⚠️  Could not write state file: {e}")
 
         stop_event.wait(STATE_WRITE_INTERVAL)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Main
@@ -75,12 +78,12 @@ if __name__ == "__main__":
     print()
 
     tracker = MultiCameraTracker(
-        cam_sources   = CAMERA_SOURCES,
-        cam_locations = CAMERA_LOCATIONS,
+        cam_sources=CAMERA_SOURCES,
+        cam_locations=CAMERA_LOCATIONS,
     )
 
     # Start background state writer thread
-    stop_event    = threading.Event()
+    stop_event = threading.Event()
     writer_thread = threading.Thread(
         target=state_writer,
         args=(tracker, stop_event),
@@ -88,11 +91,10 @@ if __name__ == "__main__":
         daemon=True,
     )
     writer_thread.start()
-    print(f"[STATE] 📝 Writing dashboard state to '{STATE_FILE}' "
-          f"every {STATE_WRITE_INTERVAL}s\n")
+    print(f"[STATE] 📝 Writing dashboard state to '{STATE_FILE}' " f"every {STATE_WRITE_INTERVAL}s\n")
 
     try:
-        tracker.run()   # blocking — shows OpenCV window, press ESC to quit
+        tracker.run()  # blocking — shows OpenCV window, press ESC to quit
     finally:
         stop_event.set()
         writer_thread.join(timeout=3)

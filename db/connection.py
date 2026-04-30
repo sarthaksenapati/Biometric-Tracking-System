@@ -7,10 +7,7 @@ from contextlib import contextmanager
 
 # Database connection string from environment
 # Format: postgresql://user:password@host:port/database
-DB_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://biometric:biometric@localhost:5432/biometric_tracking"
-)
+DB_URL = os.getenv("DATABASE_URL", "postgresql://biometric:biometric@localhost:5432/biometric_tracking")
 
 # Global connection pool (simplified - use connection pooling in production)
 _connection = None
@@ -20,10 +17,7 @@ def get_connection():
     """Get a database connection."""
     global _connection
     if _connection is None or _connection.closed:
-        _connection = psycopg2.connect(
-            DB_URL,
-            cursor_factory=RealDictCursor
-        )
+        _connection = psycopg2.connect(DB_URL, cursor_factory=RealDictCursor)
     return _connection
 
 

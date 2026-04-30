@@ -8,6 +8,7 @@ from typing import Optional, Any, List, Dict
 
 try:
     import redis
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
@@ -20,7 +21,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 _cache_instance = None
 
 
-def get_cache() -> 'RedisCache':
+def get_cache() -> "RedisCache":
     """Get or create the global cache instance."""
     global _cache_instance
     if _cache_instance is None:
@@ -69,9 +70,9 @@ class RedisCache:
         try:
             key = f"emb:{person_name}:{modality}"
             data = {
-                'embedding': embedding.tobytes(),
-                'shape': list(embedding.shape),
-                'dtype': str(embedding.dtype),
+                "embedding": embedding.tobytes(),
+                "shape": list(embedding.shape),
+                "dtype": str(embedding.dtype),
             }
             self._client.setex(key, 3600, pickle.dumps(data))  # 1 hour TTL
         except Exception as e:
@@ -86,7 +87,7 @@ class RedisCache:
             data = self._client.get(key)
             if data:
                 parsed = pickle.loads(data)
-                return np.frombuffer(parsed['embedding'], dtype=parsed['dtype']).reshape(parsed['shape'])
+                return np.frombuffer(parsed["embedding"], dtype=parsed["dtype"]).reshape(parsed["shape"])
         except Exception as e:
             print(f"[CACHE] Failed to get cached embedding: {e}")
         return None
@@ -100,9 +101,9 @@ class RedisCache:
             for person_name, emb in embeddings_dict.items():
                 key = f"emb:{person_name}:{modality}"
                 data = {
-                    'embedding': emb.tobytes(),
-                    'shape': list(emb.shape),
-                    'dtype': str(emb.dtype),
+                    "embedding": emb.tobytes(),
+                    "shape": list(emb.shape),
+                    "dtype": str(emb.dtype),
                 }
                 pipe.setex(key, 3600, pickle.dumps(data))
             pipe.execute()
@@ -127,10 +128,10 @@ class RedisCache:
                 for key, data in zip(keys, values):
                     if data:
                         parsed = pickle.loads(data)
-                        person_name = key.decode().split(':')[1]
-                        result[person_name] = np.frombuffer(
-                            parsed['embedding'], dtype=parsed['dtype']
-                        ).reshape(parsed['shape'])
+                        person_name = key.decode().split(":")[1]
+                        result[person_name] = np.frombuffer(parsed["embedding"], dtype=parsed["dtype"]).reshape(
+                            parsed["shape"]
+                        )
             return result
         except Exception as e:
             print(f"[CACHE] Failed to get all cached embeddings: {e}")
@@ -163,7 +164,7 @@ class RedisCache:
         try:
             key = f"det:{cam_id}"
             # Add timestamp
-            detection['cached_at'] = __import__('time').time()
+            detection["cached_at"] = __import__("time").time()
             self._client.lpush(key, pickle.dumps(detection))
             self._client.ltrim(key, 0, 99)  # Keep last 100
             self._client.expire(key, 300)  # 5 min TTL

@@ -75,22 +75,21 @@ def register_person(person_id):
                 status = f"Crop too small ({crop_w}x{crop_h}) — move closer!"
 
             cv2.rectangle(display, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(display, status, (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
+            cv2.putText(display, status, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 2)
 
         if not face_found and not detections:
-            cv2.putText(display, "No person detected",
-                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+            cv2.putText(display, "No person detected", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         # Show which camera is active
         cam_label = "iPhone (DroidCam)" if source != 0 else "Laptop Webcam"
-        cv2.putText(display, f"CAM: {cam_label}", (10, display.shape[0] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 0), 1)
+        cv2.putText(
+            display, f"CAM: {cam_label}", (10, display.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 0), 1
+        )
 
         cv2.imshow(f"Register Face — {person_id}", display)
         key = cv2.waitKey(1) & 0xFF
 
-        if key == ord('s'):
+        if key == ord("s"):
             if face_found:
                 for det in detections:
                     x1, y1, x2, y2 = det["bbox"]
@@ -102,12 +101,11 @@ def register_person(person_id):
                     if emb is not None:
                         emb = emb / np.linalg.norm(emb)
                         collected.append(emb)
-                        print(f"  Sample {len(collected)}/{TARGET} captured  "
-                              f"crop=({x2-x1}x{y2-y1})")
+                        print(f"  Sample {len(collected)}/{TARGET} captured  " f"crop=({x2-x1}x{y2-y1})")
                         break
 
                 if len(collected) >= TARGET:
-                    stack = np.stack(collected)   # shape (TARGET, 512)
+                    stack = np.stack(collected)  # shape (TARGET, 512)
                     save_embedding(person_id, stack, "face")
                     print(f"\n[REGISTER] ✅ Saved {TARGET} face exemplars for {person_id}")
                     print(f"           Shape: {stack.shape} — multi-exemplar matching enabled")

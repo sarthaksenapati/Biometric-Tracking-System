@@ -24,10 +24,10 @@ class Person:
                        SET display_name = EXCLUDED.display_name,
                            updated_at = CURRENT_TIMESTAMP
                        RETURNING id""",
-                    (name, display_name or name, json.dumps(metadata or {}))
+                    (name, display_name or name, json.dumps(metadata or {})),
                 )
                 result = cur.fetchone()
-                return result['id'] if result else None
+                return result["id"] if result else None
 
     @staticmethod
     def get_by_name(name: str):
@@ -71,25 +71,20 @@ class Embedding:
             Person.create(person_name)
 
         person = Person.get_by_name(person_name)
-        person_id = person['id']
+        person_id = person["id"]
 
         with get_db() as conn:
             with conn.cursor() as cur:
                 # Handle multi-exemplar (shape N, 512)
                 if embedding.ndim == 2:
                     # Delete existing exemplars for this modality
-                    cur.execute(
-                        "DELETE FROM embeddings WHERE person_id = %s AND modality = %s",
-                        (person_id, modality)
-                    )
+                    cur.execute("DELETE FROM embeddings WHERE person_id = %s AND modality = %s", (person_id, modality))
                     # Insert each exemplar
                     for idx, emb in enumerate(embedding):
                         cur.execute(
                             """INSERT INTO embeddings (person_id, modality, embedding, shape, exemplar_index)
                                VALUES (%s, %s, %s, %s, %s)""",
-                            (person_id, modality,
-                             psycopg2.Binary(emb.tobytes()),
-                             list(emb.shape), idx)
+                            (person_id, modality, psycopg2.Binary(emb.tobytes()), list(emb.shape), idx),
                         )
                 else:
                     # Single embedding
@@ -99,9 +94,7 @@ class Embedding:
                            ON CONFLICT (person_id, modality, exemplar_index)
                            DO UPDATE SET embedding = EXCLUDED.embedding,
                                            shape = EXCLUDED.shape""",
-                        (person_id, modality,
-                         psycopg2.Binary(embedding.tobytes()),
-                         list(embedding.shape))
+                        (person_id, modality, psycopg2.Binary(embedding.tobytes()), list(embedding.shape)),
                     )
 
     @staticmethod
@@ -114,19 +107,22 @@ class Embedding:
         result = {}
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT p.name, e.embedding, e.shape, e.exemplar_index
                     FROM embeddings e
                     JOIN persons p ON p.id = e.person_id
                     WHERE e.modality = %s
                     ORDER BY e.exemplar_index
-                """, (modality,))
+                """,
+                    (modality,),
+                )
 
                 rows = cur.fetchall()
                 for row in rows:
-                    name = row['name']
-                    shape = tuple(row['shape'])
-                    emb = np.frombuffer(row['embedding'], dtype=np.float32).reshape(shape)
+                    name = row["name"]
+                    shape = tuple(row["shape"])
+                    emb = np.frombuffer(row["embedding"], dtype=np.float32).reshape(shape)
 
                     if name not in result:
                         result[name] = emb
@@ -144,13 +140,16 @@ class Embedding:
         """Load embeddings for a specific person and modality."""
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     SELECT e.embedding, e.shape, e.exemplar_index
                     FROM embeddings e
                     JOIN persons p ON p.id = e.person_id
                     WHERE p.name = %s AND e.modality = %s
                     ORDER BY e.exemplar_index
-                """, (person_name, modality))
+                """,
+                    (person_name, modality),
+                )
 
                 rows = cur.fetchall()
                 if not rows:
@@ -158,8 +157,8 @@ class Embedding:
 
                 embeddings = []
                 for row in rows:
-                    shape = tuple(row['shape'])
-                    emb = np.frombuffer(row['embedding'], dtype=np.float32).reshape(shape)
+                    shape = tuple(row["shape"])
+                    emb = np.frombuffer(row["embedding"], dtype=np.float32).reshape(shape)
                     embeddings.append(emb)
 
                 if len(embeddings) == 1:
@@ -175,27 +174,30 @@ class Event:
         """Log an event."""
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO events (event_type, person_name, location, cam_id,
                                         confidence, elapsed_s, from_loc, to_loc,
                                         from_cam, to_cam, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    event_type, person_name,
-                    kwargs.get('location'),
-                    kwargs.get('cam_id'),
-                    kwargs.get('confidence', 0.0),
-                    kwargs.get('elapsed_s'),
-                    kwargs.get('from_loc'),
-                    kwargs.get('to_loc'),
-                    kwargs.get('from_cam'),
-                    kwargs.get('to_cam'),
-                    kwargs.get('timestamp', datetime.now().timestamp())
-                ))
+                """,
+                    (
+                        event_type,
+                        person_name,
+                        kwargs.get("location"),
+                        kwargs.get("cam_id"),
+                        kwargs.get("confidence", 0.0),
+                        kwargs.get("elapsed_s"),
+                        kwargs.get("from_loc"),
+                        kwargs.get("to_loc"),
+                        kwargs.get("from_cam"),
+                        kwargs.get("to_cam"),
+                        kwargs.get("timestamp", datetime.now().timestamp()),
+                    ),
+                )
 
     @staticmethod
-    def get_recent(limit: int = 50, event_type: Optional[str] = None,
-                   since: Optional[float] = None):
+    def get_recent(limit: int = 50, event_type: Optional[str] = None, since: Optional[float] = None):
         """Get recent events."""
         query = "SELECT * FROM events WHERE 1=1"
         params = []
@@ -232,7 +234,8 @@ class Camera:
     def update(cam_id: int, location: str, online: bool, source: str = None):
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO cameras (id, location, source, online, last_seen)
                     VALUES (%s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE
@@ -240,7 +243,9 @@ class Camera:
                         source = EXCLUDED.source,
                         online = EXCLUDED.online,
                         last_seen = EXCLUDED.last_seen
-                """, (cam_id, location, source, online, datetime.now().timestamp()))
+                """,
+                    (cam_id, location, source, online, datetime.now().timestamp()),
+                )
 
     @staticmethod
     def get_all():
@@ -254,15 +259,19 @@ class Detection:
     """Detection model - caches recent detections for fast lookup."""
 
     @staticmethod
-    def save(person_name: str, cam_id: int, track_id: int,
-              confidence: float, bbox: list, location: str, timestamp: float):
+    def save(
+        person_name: str, cam_id: int, track_id: int, confidence: float, bbox: list, location: str, timestamp: float
+    ):
         with get_db() as conn:
             with conn.cursor() as cur:
-                cur.execute("""
+                cur.execute(
+                    """
                     INSERT INTO detections (person_name, cam_id, track_id,
                                             confidence, bbox, location, timestamp)
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
-                """, (person_name, cam_id, track_id, confidence, bbox, location, timestamp))
+                """,
+                    (person_name, cam_id, track_id, confidence, bbox, location, timestamp),
+                )
 
     @staticmethod
     def get_active(cam_id: Optional[int] = None, since: Optional[float] = None):

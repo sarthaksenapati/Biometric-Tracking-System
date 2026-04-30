@@ -6,6 +6,7 @@ from utils.embeddings import load_all_embeddings
 from utils.similarity import find_best_match
 from models.detector import PersonDetector
 
+
 def recognize_live():
     cap = cv2.VideoCapture(0)
 
@@ -37,13 +38,7 @@ def recognize_live():
             person, score = find_best_match(emb, db)
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-            cv2.putText(frame,
-                        f"{person} ({score:.2f})",
-                        (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        0.6,
-                        (0, 255, 0),
-                        2)
+            cv2.putText(frame, f"{person} ({score:.2f})", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
         cv2.imshow("Face Recognition", frame)
 

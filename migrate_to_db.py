@@ -13,7 +13,7 @@ import sys
 import numpy as np
 
 # Ensure database mode is on
-os.environ['USE_DATABASE'] = 'true'
+os.environ["USE_DATABASE"] = "true"
 
 from db.connection import get_db
 from db.models import Person, Embedding
@@ -34,6 +34,7 @@ def migrate_embeddings():
     # Initialize database
     try:
         from db.connection import init_db
+
         init_db()
         print("✅ Database initialized")
     except Exception as e:

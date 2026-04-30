@@ -13,20 +13,21 @@ from models.detector import PersonDetector
 from utils.embeddings import save_embedding
 from config import DROIDCAM_IP, DROIDCAM_PORT
 
-DROIDCAM_URL   = f"http://{DROIDCAM_IP}:{DROIDCAM_PORT}/video"
-SAMPLES_PER_ANGLE = 4    # samples captured at each angle
-CAPTURE_ANGLES    = [
+DROIDCAM_URL = f"http://{DROIDCAM_IP}:{DROIDCAM_PORT}/video"
+SAMPLES_PER_ANGLE = 4  # samples captured at each angle
+CAPTURE_ANGLES = [
     "FRONT — face the camera directly",
     "LEFT SIDE — turn your left shoulder toward camera",
     "RIGHT SIDE — turn your right shoulder toward camera",
     "FRONT FAR — step back ~1.5m, face camera",
 ]
-TARGET_TOTAL = SAMPLES_PER_ANGLE * len(CAPTURE_ANGLES)   # 16 samples total
+TARGET_TOTAL = SAMPLES_PER_ANGLE * len(CAPTURE_ANGLES)  # 16 samples total
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Camera selection
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def select_camera():
     print("\n[CAMERA] Select registration camera:")
@@ -45,32 +46,33 @@ def select_camera():
 # Registration
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def register_body(person_id: str):
     source = select_camera()
-    cap    = cv2.VideoCapture(source)
+    cap = cv2.VideoCapture(source)
 
     if not cap.isOpened():
         print(f"[REGISTER] ❌ Could not open camera: {source}")
         return
 
     detector = PersonDetector()
-    reid     = ReIDModel()
+    reid = ReIDModel()
 
     print(f"\n[REGISTER] Registering body for: {person_id}")
     print(f"  Total samples needed : {TARGET_TOTAL} ({SAMPLES_PER_ANGLE} per angle)")
     print(f"  Angles               : {len(CAPTURE_ANGLES)}")
     print("  Press 's' to capture a sample | ESC to cancel\n")
 
-    collected     = []
-    angle_idx     = 0
-    angle_counts  = [0] * len(CAPTURE_ANGLES)
+    collected = []
+    angle_idx = 0
+    angle_counts = [0] * len(CAPTURE_ANGLES)
 
     while angle_idx < len(CAPTURE_ANGLES):
         ret, frame = cap.read()
         if not ret:
             break
 
-        display    = frame.copy()
+        display = frame.copy()
         detections = detector.detect(frame)
         person_found = False
 
@@ -89,14 +91,26 @@ def register_body(person_id: str):
             cv2.rectangle(display, (x1, y1), (x2, y2), color, 2)
 
             samples_this_angle = angle_counts[angle_idx]
-            cv2.putText(display,
-                        f"Press 's' [{samples_this_angle}/{SAMPLES_PER_ANGLE}]",
-                        (x1, max(y1 - 10, 15)),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            cv2.putText(
+                display,
+                f"Press 's' [{samples_this_angle}/{SAMPLES_PER_ANGLE}]",
+                (x1, max(y1 - 10, 15)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                color,
+                2,
+            )
 
         if not person_found:
-            cv2.putText(display, "No person detected — step into frame",
-                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 255), 2)
+            cv2.putText(
+                display,
+                "No person detected — step into frame",
+                (10, 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.65,
+                (0, 0, 255),
+                2,
+            )
 
         # ── HUD ──────────────────────────────────────────────────────────────
         angle_instruction = CAPTURE_ANGLES[angle_idx]
@@ -105,22 +119,34 @@ def register_body(person_id: str):
 
         # Instruction banner at top
         cv2.rectangle(display, (0, 0), (display.shape[1], 70), (20, 20, 20), -1)
-        cv2.putText(display,
-                    f"ANGLE {angle_idx + 1}/{len(CAPTURE_ANGLES)}: {angle_instruction}",
-                    (10, 25), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
-        cv2.putText(display,
-                    f"Total collected: {total_so_far}/{TARGET_TOTAL}",
-                    (10, 55), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (180, 180, 180), 1)
+        cv2.putText(
+            display,
+            f"ANGLE {angle_idx + 1}/{len(CAPTURE_ANGLES)}: {angle_instruction}",
+            (10, 25),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (0, 200, 255),
+            2,
+        )
+        cv2.putText(
+            display,
+            f"Total collected: {total_so_far}/{TARGET_TOTAL}",
+            (10, 55),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.55,
+            (180, 180, 180),
+            1,
+        )
 
         # Camera label at bottom
-        cv2.putText(display, f"CAM: {cam_label}",
-                    (10, display.shape[0] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 0), 1)
+        cv2.putText(
+            display, f"CAM: {cam_label}", (10, display.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 0), 1
+        )
 
         cv2.imshow(f"Register Body — {person_id}", display)
         key = cv2.waitKey(1) & 0xFF
 
-        if key == ord('s'):
+        if key == ord("s"):
             if not person_found:
                 print("  ⚠️  No person detected — step into frame first")
                 continue
@@ -140,9 +166,11 @@ def register_body(person_id: str):
                     emb = emb / (np.linalg.norm(emb) + 1e-8)
                     collected.append(emb)
                     angle_counts[angle_idx] += 1
-                    print(f"  ✅ Angle {angle_idx + 1} sample "
-                          f"{angle_counts[angle_idx]}/{SAMPLES_PER_ANGLE} captured  "
-                          f"crop=({x2-x1}x{y2-y1})")
+                    print(
+                        f"  ✅ Angle {angle_idx + 1} sample "
+                        f"{angle_counts[angle_idx]}/{SAMPLES_PER_ANGLE} captured  "
+                        f"crop=({x2-x1}x{y2-y1})"
+                    )
                     break
 
             # Move to next angle when current is complete
@@ -160,12 +188,11 @@ def register_body(person_id: str):
 
     # ── Save ─────────────────────────────────────────────────────────────────
     if len(collected) >= TARGET_TOTAL:
-        stack = np.stack(collected)   # shape: (TARGET_TOTAL, embedding_dim)
+        stack = np.stack(collected)  # shape: (TARGET_TOTAL, embedding_dim)
         save_embedding(person_id, stack, "body")
         print(f"\n[REGISTER] ✅ Saved {TARGET_TOTAL} body samples for '{person_id}'")
         print(f"           Shape: {stack.shape}")
-        print(f"           Angles covered: {len(CAPTURE_ANGLES)} "
-              f"({SAMPLES_PER_ANGLE} samples each)")
+        print(f"           Angles covered: {len(CAPTURE_ANGLES)} " f"({SAMPLES_PER_ANGLE} samples each)")
         print(f"           Multi-exemplar matching enabled ✓")
     else:
         print(f"\n[REGISTER] ⚠️  Only {len(collected)} samples collected — not saved.")

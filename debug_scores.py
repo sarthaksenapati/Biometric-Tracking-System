@@ -58,7 +58,7 @@ print("CROSS-SIMILARITY (how much they look like each other)")
 print("This is what causes false matches!")
 print("=" * 60)
 for i, p1 in enumerate(people):
-    for p2 in people[i+1:]:
+    for p2 in people[i + 1 :]:
         for mod in modalities:
             e1 = database[p1].get(mod)
             e2 = database[p2].get(mod)
@@ -81,7 +81,7 @@ for mod in modalities:
         if emb is not None:
             self_sims.append(cosine_similarity(emb, emb))
     for i, p1 in enumerate(people):
-        for p2 in people[i+1:]:
+        for p2 in people[i + 1 :]:
             e1, e2 = database[p1].get(mod), database[p2].get(mod)
             s = cosine_similarity(e1, e2)
             if s is not None:

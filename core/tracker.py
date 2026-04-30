@@ -13,15 +13,15 @@ from core.matcher import Matcher
 
 class LiveTracker:
     def __init__(self):
-        self.detector  = PersonDetector()
+        self.detector = PersonDetector()
         self.face_model = FaceRecognizer()
         self.reid_model = ReIDModel()
         self.gait_model = GaitModel()
-        self.matcher   = Matcher()
+        self.matcher = Matcher()
 
         # Per-track buffers keyed by track_id
-        self.gait_buffers = {}   # track_id → deque of crops
-        self.pred_buffers = {}   # track_id → deque of name strings
+        self.gait_buffers = {}  # track_id → deque of crops
+        self.pred_buffers = {}  # track_id → deque of name strings
 
         self.GAIT_BUFFER_SIZE = 10
         self.PRED_BUFFER_SIZE = 7
@@ -40,7 +40,7 @@ class LiveTracker:
     # ── Main ────────────────────────────────────────────────────────────────
     def process_frame(self, frame):
         detections = self.detector.detect(frame)
-        results    = []
+        results = []
 
         for idx, det in enumerate(detections):
             track_id = det.get("track_id") or idx
@@ -96,23 +96,14 @@ class LiveTracker:
             )
 
             # ── Match ─────────────────────────────────────────────────────
-            name, score = self.matcher.identify(
-                face_emb=face_emb,
-                body_emb=body_emb,
-                gait_emb=gait_emb
-            )
+            name, score = self.matcher.identify(face_emb=face_emb, body_emb=body_emb, gait_emb=gait_emb)
 
             # ── Smooth predictions ────────────────────────────────────────
             pred_buf = self._pred_buf(track_id)
             pred_buf.append(name)
             final_name = max(set(pred_buf), key=pred_buf.count)
 
-            results.append({
-                "bbox":     (x1, y1, x2, y2),
-                "name":     final_name,
-                "score":    score,
-                "track_id": track_id
-            })
+            results.append({"bbox": (x1, y1, x2, y2), "name": final_name, "score": score, "track_id": track_id})
 
         return results
 
@@ -120,16 +111,15 @@ class LiveTracker:
     def draw_results(self, frame, results):
         for res in results:
             x1, y1, x2, y2 = res["bbox"]
-            name  = res["name"]
+            name = res["name"]
             score = res["score"]
-            tid   = res["track_id"]
+            tid = res["track_id"]
 
             color = (0, 255, 0) if name != "Unknown" else (0, 0, 255)
             label = f"[{tid}] {name} ({score:.2f})"
 
             cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.putText(frame, label, (x1, y1 - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+            cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
         return frame
 
@@ -150,7 +140,7 @@ class LiveTracker:
                 break
 
             results = self.process_frame(frame)
-            frame   = self.draw_results(frame, results)
+            frame = self.draw_results(frame, results)
 
             cv2.imshow("Live Biometric Tracker", frame)
 

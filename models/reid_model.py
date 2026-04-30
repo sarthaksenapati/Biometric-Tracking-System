@@ -9,15 +9,16 @@ import numpy as np
 import cv2
 import os
 
-
 # ── Primitives ────────────────────────────────────────────────────────────────
+
 
 class ConvBnRelu(nn.Module):
     """conv + bn + relu  — keys: .conv .bn"""
+
     def __init__(self, in_ch, out_ch, k, s=1, p=0):
         super().__init__()
         self.conv = nn.Conv2d(in_ch, out_ch, k, stride=s, padding=p, bias=False)
-        self.bn   = nn.BatchNorm2d(out_ch)
+        self.bn = nn.BatchNorm2d(out_ch)
 
     def forward(self, x):
         return F.relu(self.bn(self.conv(x)), inplace=True)
@@ -25,10 +26,11 @@ class ConvBnRelu(nn.Module):
 
 class ConvBn(nn.Module):
     """conv + bn (no relu) — keys: .conv .bn"""
+
     def __init__(self, in_ch, out_ch):
         super().__init__()
         self.conv = nn.Conv2d(in_ch, out_ch, 1, bias=False)
-        self.bn   = nn.BatchNorm2d(out_ch)
+        self.bn = nn.BatchNorm2d(out_ch)
 
     def forward(self, x):
         return self.bn(self.conv(x))
@@ -39,11 +41,12 @@ class LightConv3x3(nn.Module):
     Depthwise separable conv.
     Keys: .conv1 (pointwise) .conv2 (depthwise 3x3) .bn
     """
+
     def __init__(self, ch):
         super().__init__()
         self.conv1 = nn.Conv2d(ch, ch, 1, bias=False)
         self.conv2 = nn.Conv2d(ch, ch, 3, padding=1, groups=ch, bias=False)
-        self.bn    = nn.BatchNorm2d(ch)
+        self.bn = nn.BatchNorm2d(ch)
 
     def forward(self, x):
         return F.relu(self.bn(self.conv2(self.conv1(x))), inplace=True)
@@ -58,6 +61,7 @@ class ChannelGate(nn.Module):
       mid_ch=96  → fc1=(6,96,1,1)   fc2=(96,6,1,1)
       mid_ch=128 → fc1=(8,128,1,1)  fc2=(128,8,1,1)
     """
+
     def __init__(self, ch):
         super().__init__()
         mid = ch // 16
@@ -85,21 +89,20 @@ class OSBlock(nn.Module):
       conv3       ConvBn (bottleneck out, no relu)
       downsample  ConvBn (skip, only when in_ch != out_ch)
     """
+
     def __init__(self, in_ch, out_ch):
         super().__init__()
-        mid = out_ch // 4   # 64, 96, or 128 depending on stage
+        mid = out_ch // 4  # 64, 96, or 128 depending on stage
 
-        self.conv1  = ConvBnRelu(in_ch, mid, 1)
+        self.conv1 = ConvBnRelu(in_ch, mid, 1)
 
         self.conv2a = LightConv3x3(mid)
         self.conv2b = nn.Sequential(LightConv3x3(mid), LightConv3x3(mid))
-        self.conv2c = nn.Sequential(LightConv3x3(mid), LightConv3x3(mid),
-                                    LightConv3x3(mid))
-        self.conv2d = nn.Sequential(LightConv3x3(mid), LightConv3x3(mid),
-                                    LightConv3x3(mid), LightConv3x3(mid))
+        self.conv2c = nn.Sequential(LightConv3x3(mid), LightConv3x3(mid), LightConv3x3(mid))
+        self.conv2d = nn.Sequential(LightConv3x3(mid), LightConv3x3(mid), LightConv3x3(mid), LightConv3x3(mid))
 
         # Single gate — checkpoint key is conv*.*.gate.* (not gate1/gate2/...)
-        self.gate  = ChannelGate(mid)
+        self.gate = ChannelGate(mid)
 
         self.conv3 = ConvBn(mid, out_ch)
 
@@ -108,10 +111,12 @@ class OSBlock(nn.Module):
     def forward(self, x):
         identity = x
         x1 = self.conv1(x)
-        x2 = (self.gate(self.conv2a(x1)) +
-               self.gate(self.conv2b(x1)) +
-               self.gate(self.conv2c(x1)) +
-               self.gate(self.conv2d(x1)))
+        x2 = (
+            self.gate(self.conv2a(x1))
+            + self.gate(self.conv2b(x1))
+            + self.gate(self.conv2c(x1))
+            + self.gate(self.conv2d(x1))
+        )
         x3 = self.conv3(x2)
         if self.downsample is not None:
             identity = self.downsample(identity)
@@ -141,22 +146,19 @@ class OSNet(nn.Module):
              keys: fc.0 = Linear, fc.1 = BN1d
       classifier: Linear(512, 751)
     """
+
     def __init__(self, num_classes=751):
         super().__init__()
 
-        self.conv1   = ConvBnRelu(3, 64, 7, s=2, p=3)
+        self.conv1 = ConvBnRelu(3, 64, 7, s=2, p=3)
         self.maxpool = nn.MaxPool2d(3, stride=2, padding=1)
 
         self.conv2 = nn.Sequential(
-            OSBlock(64, 256),
-            OSBlock(256, 256),
-            nn.Sequential(ConvBnRelu(256, 256, 1), nn.AvgPool2d(2, stride=2))
+            OSBlock(64, 256), OSBlock(256, 256), nn.Sequential(ConvBnRelu(256, 256, 1), nn.AvgPool2d(2, stride=2))
         )
 
         self.conv3 = nn.Sequential(
-            OSBlock(256, 384),
-            OSBlock(384, 384),
-            nn.Sequential(ConvBnRelu(384, 384, 1), nn.AvgPool2d(2, stride=2))
+            OSBlock(256, 384), OSBlock(384, 384), nn.Sequential(ConvBnRelu(384, 384, 1), nn.AvgPool2d(2, stride=2))
         )
 
         self.conv4 = nn.Sequential(
@@ -165,12 +167,9 @@ class OSNet(nn.Module):
         )
 
         self.conv5 = ConvBnRelu(512, 512, 1)
-        self.gap   = nn.AdaptiveAvgPool2d(1)
+        self.gap = nn.AdaptiveAvgPool2d(1)
 
-        self.fc = nn.Sequential(
-            nn.Linear(512, 512),
-            nn.BatchNorm1d(512)
-        )
+        self.fc = nn.Sequential(nn.Linear(512, 512), nn.BatchNorm1d(512))
 
         self.classifier = nn.Linear(512, num_classes)
 
@@ -184,10 +183,11 @@ class OSNet(nn.Module):
         x = self.gap(x)
         x = x.view(x.size(0), -1)
         x = self.fc(x)
-        return x   # 512-d embedding (before classifier)
+        return x  # 512-d embedding (before classifier)
 
 
 # ── ReIDModel wrapper ─────────────────────────────────────────────────────────
+
 
 class ReIDModel:
     WEIGHTS_PATH = "osnet_x1_0_msmt17.pth"
@@ -204,15 +204,14 @@ class ReIDModel:
 
         self.model.eval()
 
-        self.transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.Resize((256, 128)),
-            transforms.ToTensor(),
-            transforms.Normalize(
-                mean=[0.485, 0.456, 0.406],
-                std= [0.229, 0.224, 0.225]
-            )
-        ])
+        self.transform = transforms.Compose(
+            [
+                transforms.ToPILImage(),
+                transforms.Resize((256, 128)),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
 
     def _load_osnet(self, path):
         model = OSNet(num_classes=751)
@@ -222,8 +221,7 @@ class ReIDModel:
         state = {k.replace("module.", ""): v for k, v in state.items()}
 
         model_state = model.state_dict()
-        matched   = {k: v for k, v in state.items()
-                     if k in model_state and v.shape == model_state[k].shape}
+        matched = {k: v for k, v in state.items() if k in model_state and v.shape == model_state[k].shape}
         unmatched = [k for k in state if k not in matched]
 
         model_state.update(matched)
@@ -239,6 +237,7 @@ class ReIDModel:
 
     def _fallback_resnet(self):
         import torchvision.models as models
+
         m = nn.Sequential(*list(models.resnet50(pretrained=True).children())[:-1])
         return m.to(self.device)
 
@@ -249,11 +248,11 @@ class ReIDModel:
         if w < 40 or h < 80:
             return None
         try:
-            rgb    = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             tensor = self.transform(rgb).unsqueeze(0).to(self.device)
             with torch.no_grad():
                 feat = self.model(tensor)
-            emb  = feat.squeeze().cpu().numpy().astype(np.float32)
+            emb = feat.squeeze().cpu().numpy().astype(np.float32)
             norm = np.linalg.norm(emb)
             if norm == 0:
                 return None

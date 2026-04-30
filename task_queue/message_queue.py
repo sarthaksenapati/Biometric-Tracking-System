@@ -11,12 +11,14 @@ import time
 
 try:
     import redis
+
     REDIS_AVAILABLE = True
 except ImportError:
     REDIS_AVAILABLE = False
 
 try:
     import pika  # RabbitMQ
+
     RABBITMQ_AVAILABLE = True
 except ImportError:
     RABBITMQ_AVAILABLE = False
@@ -30,7 +32,7 @@ RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@localhost:5672/")
 _queue_instance = None
 
 
-def get_queue() -> 'MessageQueue':
+def get_queue() -> "MessageQueue":
     """Get or create the global queue instance."""
     global _queue_instance
     if _queue_instance is None:
@@ -63,9 +65,7 @@ class MessageQueue:
 
         elif self.queue_type == "rabbitmq" and RABBITMQ_AVAILABLE:
             try:
-                self._rabbit_connection = pika.BlockingConnection(
-                    pika.URLParameters(RABBITMQ_URL)
-                )
+                self._rabbit_connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
                 self._rabbit_channel = self._rabbit_connection.channel()
                 print(f"[QUEUE] ✅ Using RabbitMQ at {RABBITMQ_URL}")
             except Exception as e:
@@ -82,8 +82,7 @@ class MessageQueue:
 
     # ── Frame Publishing (Camera → Queue) ──────────────────────
 
-    def publish_frame(self, cam_id: int, frame: np.ndarray,
-                     detections: list, timestamp: Optional[float] = None):
+    def publish_frame(self, cam_id: int, frame: np.ndarray, detections: list, timestamp: Optional[float] = None):
         """
         Publish a camera frame for async processing.
         Frame is encoded as JPEG to save space.
@@ -92,14 +91,15 @@ class MessageQueue:
 
         # Encode frame as JPEG
         import cv2
-        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
-        frame_b64 = base64.b64encode(buffer).decode('utf-8')
+
+        _, buffer = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+        frame_b64 = base64.b64encode(buffer).decode("utf-8")
 
         message = {
-            'cam_id': cam_id,
-            'frame': frame_b64,
-            'detections': detections,
-            'timestamp': timestamp,
+            "cam_id": cam_id,
+            "frame": frame_b64,
+            "detections": detections,
+            "timestamp": timestamp,
         }
 
         if self.queue_type == "redis":
@@ -115,7 +115,7 @@ class MessageQueue:
             stream_key = f"camera:{cam_id}:frames"
             self._redis_client.xadd(
                 stream_key,
-                {'data': pickle.dumps(message)},
+                {"data": pickle.dumps(message)},
                 maxlen=100,  # Keep last 100 frames
             )
             return True
@@ -129,7 +129,7 @@ class MessageQueue:
             queue_name = f"camera_{cam_id}"
             self._rabbit_channel.queue_declare(queue=queue_name, durable=True)
             self._rabbit_channel.basic_publish(
-                exchange='',
+                exchange="",
                 routing_key=queue_name,
                 body=pickle.dumps(message),
                 properties=pika.BasicProperties(delivery_mode=2),  # Persistent
@@ -144,6 +144,7 @@ class MessageQueue:
         queue_key = f"camera:{cam_id}"
         if queue_key not in self._memory_queues:
             from collections import deque
+
             self._memory_queues[queue_key] = deque(maxlen=100)
             self._memory_locks[queue_key] = threading.Lock()
 
@@ -153,8 +154,7 @@ class MessageQueue:
 
     # ── Frame Consumption (Queue → Processor) ─────────────────
 
-    def consume_frames(self, cam_id: int, callback: Callable[[dict], Any],
-                      blocking: bool = True):
+    def consume_frames(self, cam_id: int, callback: Callable[[dict], Any], blocking: bool = True):
         """
         Consume frames from the queue.
         callback receives the message dict and should process it.
@@ -171,7 +171,7 @@ class MessageQueue:
     def _consume_redis(self, cam_id: int, callback: Callable):
         """Consume from Redis Stream."""
         stream_key = f"camera:{cam_id}:frames"
-        last_id = '$'  # Start from newest
+        last_id = "$"  # Start from newest
 
         while self._running:
             try:
@@ -185,7 +185,7 @@ class MessageQueue:
                 for stream, msgs in messages:
                     for msg_id, fields in msgs:
                         last_id = msg_id
-                        data = pickle.loads(fields[b'data'])
+                        data = pickle.loads(fields[b"data"])
                         callback(data)
 
             except Exception as e:
@@ -238,15 +238,14 @@ class MessageQueue:
 
     # ── Embedding Message (for async registration) ─────────────
 
-    def publish_embedding_task(self, person_name: str, modality: str,
-                              embedding: np.ndarray):
+    def publish_embedding_task(self, person_name: str, modality: str, embedding: np.ndarray):
         """Publish an embedding to be saved async."""
         message = {
-            'type': 'save_embedding',
-            'person_name': person_name,
-            'modality': modality,
-            'embedding': embedding.tobytes(),
-            'shape': list(embedding.shape),
+            "type": "save_embedding",
+            "person_name": person_name,
+            "modality": modality,
+            "embedding": embedding.tobytes(),
+            "shape": list(embedding.shape),
         }
 
         if self.queue_type == "redis":

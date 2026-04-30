@@ -5,14 +5,15 @@ Usage:  python gpu_check.py
 
 import sys
 
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("  SYSTEM DIAGNOSTIC — Final Year Project")
 print("  (Intel Iris Xe — CPU/OpenVINO mode)")
-print("="*60)
+print("=" * 60)
 
 # ── 1. PyTorch ────────────────────────────────────────────────────────────────
 try:
     import torch
+
     cuda_ok = torch.cuda.is_available()
     print(f"\n[PyTorch]  version={torch.__version__}")
     print(f"           CUDA available : {cuda_ok}")
@@ -28,6 +29,7 @@ except ImportError:
 print()
 try:
     import onnxruntime as ort
+
     providers = ort.get_available_providers()
     print(f"[ONNX RT]  version={ort.__version__}")
     print(f"           Providers: {providers}")
@@ -47,6 +49,7 @@ print()
 try:
     import insightface
     from insightface.app import FaceAnalysis
+
     print(f"[InsightFace] version={insightface.__version__}")
 
     # CPU-safe initialization — no CUDA required
@@ -73,6 +76,7 @@ print()
 try:
     from ultralytics import YOLO
     import torch
+
     model = YOLO("yolov8n.pt")
     device = next(model.model.parameters()).device
     print(f"[YOLO]     device={device}")
@@ -87,15 +91,16 @@ except Exception as e:
 print()
 try:
     import torchreid
+
     print(f"[Torchreid] ✅  Installed")
     print(f"            Running on CPU — fine for this project")
 except ImportError:
     print("[Torchreid] ❌  Not installed — run: pip install torchreid")
 
 # ── 6. Summary ────────────────────────────────────────────────────────────────
-print("\n" + "="*60)
+print("\n" + "=" * 60)
 print("  SUMMARY & NEXT STEPS")
-print("="*60)
+print("=" * 60)
 print("""
 This project is configured for Intel Iris Xe (no NVIDIA GPU).
 CPU mode is fully supported — ignore all CUDA warnings.

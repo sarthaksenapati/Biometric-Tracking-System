@@ -31,11 +31,11 @@ def cosine_similarity(a, b):
     # Multi-exemplar: shape (N, 512)
     if b.ndim == 2:
         norms = np.linalg.norm(b, axis=1, keepdims=True)
-        valid = (norms.flatten() > 0)
+        valid = norms.flatten() > 0
         if not np.any(valid):
             return None
         b_norm = b[valid] / norms[valid]
-        sims = b_norm @ a   # (N,) dot products
+        sims = b_norm @ a  # (N,) dot products
         return float(np.max(sims))
 
     # Single exemplar: shape (512,)
@@ -53,9 +53,9 @@ class Matcher:
         self.cache = get_cache()
 
         # Dynamic threshold scales with gallery size
-        self.BASE_THRESHOLD         = 0.45
-        self.THRESHOLD_WITHOUT_FACE = 0.99   # effectively disabled
-        self.MARGIN                 = 0.15
+        self.BASE_THRESHOLD = 0.45
+        self.THRESHOLD_WITHOUT_FACE = 0.99  # effectively disabled
+        self.MARGIN = 0.15
 
         self.load_database()
 
@@ -86,13 +86,17 @@ class Matcher:
                     # Cache in Redis for faster lookups
                     if self.cache.is_available:
                         for modality in ["face", "body", "gait"]:
-                            modality_db = {name: data.get(modality)
-                                         for name, data in self.database.items()
-                                         if data.get(modality) is not None}
+                            modality_db = {
+                                name: data.get(modality)
+                                for name, data in self.database.items()
+                                if data.get(modality) is not None
+                            }
                             if modality_db:
                                 self.cache.cache_all_embeddings(modality, modality_db)
-                    print(f"[DB LOAD] Dynamic threshold for {len(self.database)} people: "
-                          f"{self._dynamic_threshold():.2f}\n")
+                    print(
+                        f"[DB LOAD] Dynamic threshold for {len(self.database)} people: "
+                        f"{self._dynamic_threshold():.2f}\n"
+                    )
                     return
                 else:
                     print("[DB LOAD] ⚠️  No data in database, falling back to .npy files")
@@ -113,7 +117,7 @@ class Matcher:
             parts = file.replace(".npy", "").split("_")
             if len(parts) < 2:
                 continue
-            name     = parts[0]
+            name = parts[0]
             modality = parts[1].lower()
             if modality not in ("face", "body", "gait"):
                 continue
@@ -127,8 +131,7 @@ class Matcher:
                 print(f"[DB LOAD] ❌  {file}: {e}")
 
         print(f"\n[DB LOAD] Loaded: {list(self.database.keys())}")
-        print(f"[DB LOAD] Dynamic threshold for {len(self.database)} people: "
-              f"{self._dynamic_threshold():.2f}\n")
+        print(f"[DB LOAD] Dynamic threshold for {len(self.database)} people: " f"{self._dynamic_threshold():.2f}\n")
 
     def reload(self):
         """Reload embeddings from database/files without restarting."""
@@ -137,9 +140,11 @@ class Matcher:
         if self.cache.is_available:
             self.cache.invalidate_embedding()
         self.load_database()
-        print(f"[Matcher] ✅ Reload complete — "
-              f"{len(self.database)} persons now in DB: "
-              f"{list(self.database.keys())}")
+        print(
+            f"[Matcher] ✅ Reload complete — "
+            f"{len(self.database)} persons now in DB: "
+            f"{list(self.database.keys())}"
+        )
 
     def identify(self, face_emb=None, body_emb=None, gait_emb=None):
         if not self.database:
@@ -154,16 +159,16 @@ class Matcher:
             gait_sim = cosine_similarity(gait_emb, data.get("gait"))
 
             final_score, trusted = self.fusion.compute_final_score(
-                face_score=face_sim,
-                body_score=body_sim,
-                gait_score=gait_sim,
-                verbose=True
+                face_score=face_sim, body_score=body_sim, gait_score=gait_sim, verbose=True
             )
 
             parts = []
-            if face_sim is not None: parts.append(f"face={face_sim:.3f}")
-            if body_sim is not None: parts.append(f"body={body_sim:.3f}")
-            if gait_sim is not None: parts.append(f"gait={gait_sim:.3f}")
+            if face_sim is not None:
+                parts.append(f"face={face_sim:.3f}")
+            if body_sim is not None:
+                parts.append(f"body={body_sim:.3f}")
+            if gait_sim is not None:
+                parts.append(f"gait={gait_sim:.3f}")
             print(f"[MATCHER] {person:15s} | {' | '.join(parts)} | final={final_score:.3f}")
 
             scores.append((person, final_score, trusted))
@@ -176,8 +181,10 @@ class Matcher:
 
         active_threshold = threshold if best_trusted else self.THRESHOLD_WITHOUT_FACE
 
-        print(f"[MATCHER] Best={best_person} ({best_score:.3f}) | 2nd={second_score:.3f} | "
-              f"margin={margin:.3f} | threshold={active_threshold:.2f} | trusted={best_trusted}")
+        print(
+            f"[MATCHER] Best={best_person} ({best_score:.3f}) | 2nd={second_score:.3f} | "
+            f"margin={margin:.3f} | threshold={active_threshold:.2f} | trusted={best_trusted}"
+        )
 
         if not best_trusted:
             print(f"[MATCHER] ❌  → Unknown (no face — refusing to guess)")

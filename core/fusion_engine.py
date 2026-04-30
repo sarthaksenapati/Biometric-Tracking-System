@@ -12,23 +12,12 @@ class FusionEngine:
         #   body:  0.35  — strong secondary signal (OSNet MSMT17 fully loaded)
         #   gait:  0.01  — frontal camera limits gait utility, near-zero weight
         #
-        self.default_weights = {
-            "face": 0.65,
-            "body": 0.35,
-            "gait": 0.01
-        }
+        self.default_weights = {"face": 0.65, "body": 0.35, "gait": 0.01}
 
-    def compute_final_score(
-        self,
-        face_score=None,
-        body_score=None,
-        gait_score=None,
-        attr_score=None,
-        verbose=False
-    ):
-        scores  = []
+    def compute_final_score(self, face_score=None, body_score=None, gait_score=None, attr_score=None, verbose=False):
+        scores = []
         weights = []
-        labels  = []
+        labels = []
 
         if face_score is not None:
             # Clip to 0 — a negative face score means the face was unrecognisable
@@ -52,7 +41,7 @@ class FusionEngine:
         if len(scores) == 0:
             return 0.0, False
 
-        scores  = np.array(scores)
+        scores = np.array(scores)
         weights = np.array(weights)
 
         # Normalize so available modalities always sum to 1

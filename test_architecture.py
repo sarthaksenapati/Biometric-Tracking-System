@@ -17,13 +17,14 @@ print("=" * 60)
 print("\n[1/4] Testing PostgreSQL Database...")
 try:
     from db.connection import get_db, init_db, close_db
+
     init_db()
     print("✅ Database schema initialized")
 
     with get_db() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT COUNT(*) FROM persons")
-            count = cur.fetchone()['count']
+            count = cur.fetchone()["count"]
             print(f"✅ Database connection OK (persons: {count})")
 
     print("✅ Database test PASSED")
@@ -35,6 +36,7 @@ except Exception as e:
 print("\n[2/4] Testing Redis Cache...")
 try:
     from cache import get_cache
+
     cache = get_cache()
     if cache.is_available:
         cache.cache_tracker_state({"test": True})
@@ -52,6 +54,7 @@ except Exception as e:
 print("\n[3/4] Testing Message Queue...")
 try:
     from task_queue import get_queue
+
     q = get_queue()
     print(f"✅ Message queue initialized (type: {q.queue_type})")
     print("✅ Message queue test PASSED")
@@ -62,6 +65,7 @@ except Exception as e:
 print("\n[4/4] Testing Matcher with Database...")
 try:
     from core.matcher import Matcher
+
     m = Matcher()
     count = len(m.database)
     print(f"✅ Matcher loaded {count} persons from database")

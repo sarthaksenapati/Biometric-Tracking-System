@@ -29,10 +29,10 @@ class GaitModel:
             return None
 
         # Stack → GPU tensor → mean (GEI) → normalize
-        arr    = np.stack(silhouettes).astype(np.float32) / 255.0   # [N, 128, 64]
-        tensor = torch.from_numpy(arr).to(self.device)              # GPU
-        gei    = tensor.mean(dim=0).flatten()                        # [8192]  GPU mean
-        norm   = torch.norm(gei)
+        arr = np.stack(silhouettes).astype(np.float32) / 255.0  # [N, 128, 64]
+        tensor = torch.from_numpy(arr).to(self.device)  # GPU
+        gei = tensor.mean(dim=0).flatten()  # [8192]  GPU mean
+        norm = torch.norm(gei)
         if norm < 1e-8:
             return None
-        return (gei / norm).cpu().numpy().astype(np.float32)        # back to numpy
+        return (gei / norm).cpu().numpy().astype(np.float32)  # back to numpy
