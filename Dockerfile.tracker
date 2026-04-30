@@ -1,8 +1,8 @@
 # Dockerfile.tracker - Multi-camera tracker service
-FROM python:3.10-slim
+FROM python:3.10-slim-bookworm
 
 # Install system dependencies for OpenCV, camera access, and virtual display
-RUN apt-get update && apt-get install -y \
+RUN apt-get update --fix-missing && apt-get install -y --fix-missing \
     build-essential \
     cmake \
     pkg-config \
