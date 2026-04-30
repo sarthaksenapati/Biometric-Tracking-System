@@ -161,7 +161,7 @@ The system provides **real-time tracking** across multiple cameras, **fusion-bas
 
 1. **Clone the Repository**
    ```bash
-   git clone https://github.com/your-username/biometric-tracking-system.git
+   git clone https://github.com/sarthaksenapati/Biometric-Tracking-System.git
    cd biometric-tracking-system
    ```
 
@@ -343,6 +343,189 @@ BODY_THRESHOLD = 0.99  # Effectively disabled without face
 
 ### Camera Configuration
 Modify `run_tracker_multi.py` for your camera setup.
+
+---
+
+---
+
+## 🐳 Docker Setup
+
+Containerized deployment for cross-platform support.
+
+### Quick Start
+
+```bash
+# Copy environment file
+cp .env.example .env
+
+# Build all images
+docker-compose build
+
+# Start all services (tracker + backend + dashboard)
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop all
+docker-compose down
+```
+
+### Services
+
+| Service | Description | Port |
+|---------|-------------|------|
+| **tracker** | Multi-camera tracker with OpenCV | 8502 |
+| **backend** | FastAPI backend API | 8000 |
+| **dashboard** | Streamlit web dashboard | 8501 |
+| **redis** | Redis for caching and messaging | 6379 |
+
+### Platform Support
+
+- **Linux**: Use `docker-compose.linux.yml` override for camera access
+- **Windows**: Use `docker-compose.windows.yml` (IP cameras) or run tracker locally
+- **Mac**: Run tracker locally, containerize backend + dashboard
+
+### Quick Commands (Makefile)
+
+```bash
+make build    # Build all Docker images
+make up       # Start all services
+make down     # Stop all services
+make logs     # View all logs
+make dev      # Development mode with hot-reload
+```
+
+See [DOCKER-README.md](DOCKER-README.md) for full Docker documentation.
+
+---
+
+## 🚀 Deployment
+
+### Hybrid Architecture (Recommended)
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     LOCAL MACHINE                             │
+│  ┌──────────────────────────────────────────────────────────┐    │
+│  │  Tracker Service (run_tracker_multi.py)               │    │
+│  │  - Camera access (webcam/IP camera)                   │    │
+│  │  - Local models (YOLO, InsightFace, OSNet)          │    │
+│  └──────────────────────────────────────────────────────────┘    │
+└──────────────────┬───────────────────────────────────────┘
+                           │ HTTP/REST API
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                     RENDER.COM (Cloud)                         │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌──────────┐  │
+│  │  Backend API    │    │  Dashboard     │    │  Redis  │  │
+│  │  (FastAPI)     │◀───│  (Streamlit)  │    │  Cache  │  │
+│  │  Port: 8000    │    │  Port: 8501    │    │         │  │
+│  └─────────────────┘    └─────────────────┘    └──────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Why this architecture?**
+- Tracker needs camera access → runs locally
+- Backend/Dashboard → deployed to Render.com for remote access
+- Hybrid approach → best of both worlds
+
+### Deploy to Render.com
+
+1. **Push to GitHub** (triggers CI/CD):
+   ```bash
+   git add .
+   git commit -m "feat: ready for deployment"
+   git push origin main
+   ```
+
+2. **Connect to Render**:
+   - Go to [Render.com](https://render.com) → **"New +"** → **"Blueprint"**
+   - Connect your GitHub repository
+   - Render auto-detects `render.yaml`
+
+3. **Add GitHub Secrets** (for auto-deploy):
+   - `RENDER_API_KEY`
+   - `RENDER_BACKEND_SERVICE_ID`
+   - `RENDER_DASHBOARD_SERVICE_ID`
+
+4. **Run Tracker Locally**:
+   ```bash
+   # Update config.py with Render URLs
+   BACKEND_URL = "https://biometric-backend.onrender.com"
+   DASHBOARD_URL = "https://biometric-dashboard.onrender.com"
+   USE_REMOTE_BACKEND = True
+
+   # Run tracker
+   python run_tracker_multi.py
+   ```
+
+5. **Verify**:
+   - Backend: https://biometric-backend.onrender.com/
+   - Dashboard: https://biometric-dashboard.onrender.com/
+
+### Cloud Deployment (AWS/GCP/Azure)
+
+```bash
+# SSH into your cloud VM
+ssh user@your-vm-ip
+
+# Clone and deploy with Docker Compose
+git clone https://github.com/sarthaksenapati/biometric-tracking-system.git
+cd biometric-tracking-system
+docker-compose -f docker-compose.yml \
+             -f deploy/cloud/docker-compose.cloud.yml \
+             up -d
+```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) and [deploy/](deploy/) for details.
+
+### Edge Deployment
+
+| Device | Config | Use Case |
+|--------|--------|----------|
+| **Jetson Nano** | `deploy/edge/jetson/` | On-premise surveillance with GPU |
+| **Raspberry Pi** | `deploy/edge/raspberry-pi/` | Budget edge deployment |
+
+---
+
+## 🏗️ Architecture
+
+### Database-Driven (New)
+
+The system now uses **PostgreSQL** as primary storage with **Redis** for caching:
+
+| Component | Technology | Purpose |
+|-----------|-------------|---------|
+| **PostgreSQL** | PostgreSQL 16+ | Embeddings, events, detections |
+| **Redis** | Redis 7+ | Cache embeddings, recent detections |
+| **Message Queue** | Redis Streams / RabbitMQ | Async camera processing |
+
+### Schema
+
+```
+persons      → Person records (name, display_name, metadata)
+embeddings    → Face/body/gait embeddings (BYTEA, multi-exemplar)
+events       → Sightings, handoffs (with timestamps)
+cameras      → Camera status and locations
+detections   → Recent detections cache
+```
+
+### Fallback to File-Based Storage
+
+If `USE_DATABASE=false` or database is unavailable, the system automatically falls back to:
+- `.npy` files for embeddings
+- `tracker_history.json` for event history
+
+### Migration
+
+```bash
+# Migrate existing .npy files to PostgreSQL
+export USE_DATABASE=true
+python migrate_to_db.py
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture documentation.
 
 ---
 
@@ -601,3 +784,33 @@ This project is for academic and research purposes.
 - [DeepFace](https://github.com/serengil/deepface)
 - [PyTorch Community](https://pytorch.org)
 - [OpenCV](https://opencv.org)
+---
+
+## New in This Version
+
+### Containerization
+- **Dockerfiles** for tracker, backend, dashboard services
+- **Docker Compose** with cross-platform support (Linux/Windows/Mac)
+- **Makefile** for simplified Docker operations (`make up`, `make logs`)
+
+### Cloud Deployment
+- **Render.com** Blueprint (`render.yaml`) for backend + dashboard
+- **GitHub Actions** CI/CD (`.github/workflows/ci-cd.yml`)
+- **Hybrid architecture**: Local tracker + cloud API/dashboard
+
+### Architecture Overhaul
+- **PostgreSQL** database (replaces .npy file storage)
+- **Redis** caching layer for embeddings and detections
+- **Message Queue** support (Redis Streams / RabbitMQ)
+- **Automatic fallback** to file-based storage when DB unavailable
+
+### New Files
+| Path | Description |
+|------|-------------|
+| `db/*` | PostgreSQL connection + models |
+| `cache/*` | Redis caching layer |
+| `queue/*` | Message queue abstraction |
+| `deploy/*` | Cloud/edge deployment configs |
+| `ARCHITECTURE.md` | Full architecture documentation |
+| `DEPLOYMENT.md` | Deployment guide |
+| `runtime.txt` | Python version pinning for Render (3.11.0) |
