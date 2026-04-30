@@ -122,18 +122,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Deploy Backend to Render
-        uses: johnbeynon/render-deploy-action@v1
-        with:
-          service-id: ${{ secrets.RENDER_BACKEND_SERVICE_ID }}
-          api-key: ${{ secrets.RENDER_API_KEY }}
-          wait-for-success: true
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_BACKEND }}
 
       - name: Deploy Dashboard to Render
-        uses: johnbeynon/render-deploy-action@v1
-        with:
-          service-id: ${{ secrets.RENDER_DASHBOARD_SERVICE_ID }}
-          api-key: ${{ secrets.RENDER_API_KEY }}
-          wait-for-success: true
+        run: curl -X POST ${{ secrets.RENDER_DEPLOY_HOOK_DASHBOARD }}
 
       - name: Notify deployment success
         if: success()
