@@ -1,6 +1,6 @@
-markdown# 🧠 Multi-Modal Biometric Tracking System
+# 🧠 Multi-Modal Biometric Tracking System
 
-A sophisticated **AI-powered biometric surveillance system** that identifies and tracks individuals across campus environments using **face recognition, body re-identification, and gait analysis**. Built for real-time multi-camera tracking with a web-based monitoring dashboard.
+An AI-powered biometric surveillance system that identifies and tracks individuals across campus environments using **face recognition**, **body re-identification**, and **gait analysis**. Built for real-time multi-camera tracking with a web-based monitoring dashboard.
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-red.svg)](https://pytorch.org/)
@@ -13,11 +13,9 @@ A sophisticated **AI-powered biometric surveillance system** that identifies and
 
 This system addresses the limitations of single-modal biometric systems by combining **three complementary modalities** for robust person identification:
 
-- **Face Recognition**: Primary identifier using facial features
-- **Body Re-Identification (ReID)**: Secondary identifier using body structure and clothing
-- **Gait Recognition**: Tertiary identifier using walking patterns
-
-The system provides **real-time tracking** across multiple cameras, **fusion-based matching** with trust logic, and a **comprehensive dashboard** for monitoring and administration.
+- **Face Recognition** — Primary identifier using facial features
+- **Body Re-Identification (ReID)** — Secondary identifier using body structure and clothing
+- **Gait Recognition** — Tertiary identifier using walking patterns
 
 ---
 
@@ -31,84 +29,68 @@ The system provides **real-time tracking** across multiple cameras, **fusion-bas
                                                           │
                                                           ▼
 ┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│  Feature Fusion │    │   Identity Match │    │ Multi-Camera    │
-│   & Matching    │◀───│    (Database)    │───▶│   Tracking      │
+│  Feature Fusion │    │  Identity Match  │    │  Multi-Camera   │
+│   & Matching    │◀───│   (Database)    │───▶│    Tracking     │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
                                                           │
                                                           ▼
                                                ┌─────────────────┐
-                                               │   Dashboard &   │
+                                               │  Dashboard &    │
                                                │   API Output    │
                                                └─────────────────┘
 ```
 
 ### Key Components
 
-- **Detection Engine**: YOLOv8 with ByteTrack for stable person tracking
-- **Feature Extractors**:
-  - Face: InsightFace or DeepFace (FaceNet)
-  - Body: Custom OSNet-x1.0 implementation
-  - Gait: Silhouette-based temporal averaging
-- **Fusion Engine**: Weighted score combination with modality-specific weights
-- **Matcher**: Cosine similarity against stored embeddings
-- **Tracker**: Multi-camera identity handoff and temporal smoothing
-- **Dashboard**: Streamlit-based monitoring interface
+| Component | Technology | Description |
+|-----------|-----------|-------------|
+| **Detection** | YOLOv8 + ByteTrack | Real-time person detection & stable tracking |
+| **Face Model** | InsightFace / DeepFace | 512D face embeddings |
+| **Body ReID** | Custom OSNet-x1.0 | 2048D body embeddings |
+| **Gait Model** | Silhouette-based | 64×128 temporal features |
+| **Fusion Engine** | Weighted scoring | Face: 95%, Body: 4%, Gait: 1% |
+| **Database** | PostgreSQL 16+ | Embeddings, events, detections |
+| **Cache** | Redis 7+ | Fast embedding lookups |
+| **Backend** | FastAPI + Uvicorn | REST API |
+| **Dashboard** | Streamlit | Web monitoring interface |
 
 ---
 
 ## 🚀 Features
 
-### ✅ Core Features Implemented
-
-#### 🔍 Person Detection & Tracking
+### Detection & Tracking
 - Real-time human detection using YOLOv8
 - Stable tracking with ByteTrack algorithm
 - Multi-camera support with identity handoff
 - Temporal smoothing to reduce identification flicker
 
-#### 👤 Multi-Modal Biometric Recognition
-- **Face Recognition**: 512D embeddings, works in various lighting/angles
-- **Body ReID**: 2048D embeddings, robust to pose/clothing changes
-- **Gait Recognition**: 64×128 silhouette features with temporal averaging
-- **Fusion Logic**: Data-driven weights (Face: 95%, Body: 4%, Gait: 1%)
-- **Trust System**: Face required for confident identification
-
-#### 📊 Database & Matching
-- **PostgreSQL**: Primary storage for embeddings, events, and detections (replaces .npy files)
-- **Redis Cache**: In-memory caching for fast embedding lookups and recent detections
-- **File Fallback**: Automatic fallback to .npy files when database is unavailable
-- Cosine similarity matching with configurable thresholds
-- Support for multiple exemplars per person
+### Multi-Modal Biometric Recognition
+- Face, body, and gait recognition with fusion-based matching
+- Trust system: face required for confident identification
 - Unknown person detection and storage
+- Cosine similarity matching with configurable thresholds
 
-#### 🎛️ Monitoring Dashboard
+### Database & Storage
+- **PostgreSQL** as primary storage (replaces `.npy` files)
+- **Redis** caching layer for fast embedding lookups
+- **Automatic fallback** to file-based storage when DB is unavailable
+- Support for multiple exemplars per person
+
+### Monitoring Dashboard
 - Real-time active person display
 - Event logging (sightings, handoffs)
 - Person search across current session and history
-- Camera status monitoring
-- Persistent history (7-day retention)
+- Camera status monitoring with 7-day history retention
 
-#### 🔧 Administration Tools
-- Person registration scripts for each modality
+### Administration
+- Per-modality registration scripts
 - Embedding management and renaming utilities
 - Cross-similarity analysis for threshold tuning
 - Debug tools for performance evaluation
 
-### 🔮 Planned Features
-- Image-based search
-- Attribute-based filtering (clothing color, height)
-- Full campus map visualization
-- Advanced analytics and reporting
-
 ---
 
-## 🧪 Testing & Validation
-
-### Methodology
-- **Positive Tests**: Registered persons correctly identified
-- **Negative Tests**: Unregistered persons rejected
-- **Robustness Tests**: Different clothing, lighting, angles
-- **Cross-Modality Analysis**: Similarity distribution analysis for weight tuning
+## 🧪 Testing & Performance
 
 ### Example Results
 
@@ -123,7 +105,7 @@ The system provides **real-time tracking** across multiple cameras, **fusion-bas
 ### Performance Metrics
 - **Accuracy**: >90% for registered persons with face available
 - **False Positive Rate**: <5% with proper thresholds
-- **Real-time Processing**: 15-20 FPS on GPU, 5-8 FPS on CPU
+- **Real-time Processing**: 15–20 FPS on GPU, 5–8 FPS on CPU
 - **Memory Usage**: ~2GB for models + embeddings
 
 ---
@@ -139,95 +121,83 @@ The system provides **real-time tracking** across multiple cameras, **fusion-bas
 | **Body ReID** | Custom OSNet-x1.0 (MSMT17 pretrained) |
 | **Gait Analysis** | Custom silhouette extraction |
 | **Database** | PostgreSQL 16+ (primary), NumPy files (fallback) |
-| **Caching** | Redis 7+ (embeddings, detections) |
-| **Message Queue** | Redis Streams / RabbitMQ (optional, async processing) |
+| **Caching** | Redis 7+ |
+| **Message Queue** | Redis Streams / RabbitMQ (optional) |
 | **Backend** | FastAPI, Uvicorn |
 | **Dashboard** | Streamlit |
 | **Deployment** | Docker, Docker Compose, Render.com |
 | **CI/CD** | GitHub Actions |
-| **Data Processing** | NumPy, psycopg2, redis-py |
-| **Utilities** | JSON, Threading, Collections |
 
 ---
 
 ## 📦 Installation
 
 ### Prerequisites
-- Python 3.10 or higher
-- CUDA-compatible GPU (recommended for real-time performance) or Intel Iris Xe
-- Webcam or IP cameras for testing
+- Python 3.10+
+- CUDA-compatible GPU (recommended) or Intel Iris Xe
+- Webcam or IP cameras
 
-### Step-by-Step Setup
+### Setup
 
-1. **Clone the Repository**
-   ```bash
-   git clone https://github.com/sarthaksenapati/Biometric-Tracking-System.git
-   cd biometric-tracking-system
-   ```
+```bash
+# 1. Clone the repository
+git clone https://github.com/sarthaksenapati/Biometric-Tracking-System.git
+cd Biometric-Tracking-System
 
-2. **Create Virtual Environment**
-   ```bash
-   python -m venv venv
-   # On Windows:
-   venv\Scripts\activate
-   # On Linux/Mac:
-   source venv/bin/activate
-   ```
+# 2. Create and activate virtual environment
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
 
-3. **Install Dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+# 3. Install dependencies
+pip install -r requirements.txt
 
-4. **Download Pre-trained Models**
-   - YOLOv8 model: Automatically downloaded by Ultralytics
-   - OSNet weights: Included in repository (`osnet_x1_0_msmt17.pth`)
-   - Face models: Downloaded automatically by InsightFace/DeepFace
+# 4. Verify installation
+python test.py
+```
 
-5. **Verify Installation**
-   ```bash
-   python test.py
-   ```
+> **Models**: YOLOv8 and face models are downloaded automatically. OSNet weights (`osnet_x1_0_msmt17.pth`) are included in the repository.
 
 ---
 
 ## ▶️ Usage
 
-### Quick Start
+### 1. Register a Person
 
-1. **Register a Person**
-   ```bash
-   # Register face (capture 15 images)
-   python -m backend.register
+```bash
+python -m backend.register         # Face (captures 15 images)
+python -m backend.register_body    # Body (captures 10 crops)
+python -m backend.register_gait    # Gait (captures 20–30 frames walking)
+```
 
-   # Register body (capture 10 crops)
-   python -m backend.register_body
+### 2. Run Live Tracking
 
-   # Register gait (capture 20-30 frames walking)
-   python -m backend.register_gait
-   ```
+```bash
+python run_tracker.py              # Single camera
+python run_tracker_multi.py        # Multi-camera
+```
 
-2. **Run Live Tracking**
-   ```bash
-   # Single camera
-   python run_tracker.py
+### 3. Launch Dashboard
 
-   # Multi-camera (requires camera configuration)
-   python run_tracker_multi.py
-   ```
+```bash
+python -m streamlit run dashboard.py
+```
 
-3. **Launch Dashboard**
-   ```bash
-   python -m streamlit run dashboard.py
-   ```
+### 4. Start Backend API
 
-### Advanced Usage
+```bash
+uvicorn backend.app:app --reload
+```
 
-#### Camera Configuration
-Edit `run_tracker_multi.py` to configure camera sources:
+### Camera Configuration
+
+Edit `run_tracker_multi.py` to set your camera sources:
+
 ```python
 sources = {
-    0: 0,        # Webcam
+    0: 0,             # Webcam
     1: "rtsp://...",  # IP Camera
 }
 cam_locations = {
@@ -236,19 +206,12 @@ cam_locations = {
 }
 ```
 
-#### Person Management
-```bash
-# Rename a person in database
-python -m utils.admin_controls rename OldName NewName
+### Person Management
 
-# Analyze cross-similarities
-python debug_scores.py
-```
-
-#### API Usage
 ```bash
-# Start backend API
-uvicorn backend.app:app --reload
+python -m utils.admin_controls rename OldName NewName  # Rename a person
+python debug_scores.py                                  # Analyze cross-similarities
+python GPU.py                                           # Check GPU availability
 ```
 
 ---
@@ -258,76 +221,58 @@ uvicorn backend.app:app --reload
 ```
 biometric-tracking-system/
 │
-├── 📂 backend/                    # Registration & recognition scripts
-│   ├── __init__.py
-│   ├── app.py                     # FastAPI backend
-│   ├── register.py                # Face registration
-│   ├── recognize.py               # Face recognition
-│   ├── register_body.py           # Body registration
-│   ├── recognize_body.py          # Body recognition
-│   ├── register_gait.py           # Gait registration
-│   └── recognize_gait.py          # Gait recognition
+├── backend/                  # Registration & recognition scripts
+│   ├── app.py                # FastAPI backend
+│   ├── register.py           # Face registration
+│   ├── recognize.py          # Face recognition
+│   ├── register_body.py      # Body registration
+│   ├── recognize_body.py     # Body recognition
+│   ├── register_gait.py      # Gait registration
+│   └── recognize_gait.py     # Gait recognition
 │
-├── 📂 core/                       # Core tracking logic
-│   ├── __init__.py
-│   ├── tracker.py                 # Single-camera tracker
-│   ├── multi_tracker.py           # Multi-camera tracker
-│   ├── matcher.py                 # Database matching
-│   ├── fusion_engine.py           # Modality fusion
-│   └── __pycache__/
+├── core/                     # Core tracking logic
+│   ├── tracker.py            # Single-camera tracker
+│   ├── multi_tracker.py      # Multi-camera tracker
+│   ├── matcher.py            # Database matching
+│   └── fusion_engine.py      # Modality fusion
 │
-├── 📂 models/                     # AI model implementations
-│   ├── __init__.py
-│   ├── detector.py                # YOLOv8 person detection
-│   ├── face_model.py              # Face recognition
-│   ├── reid_model.py              # Body ReID (OSNet)
-│   ├── gait_model.py              # Gait recognition
-│   └── __pycache__/
+├── models/                   # AI model implementations
+│   ├── detector.py           # YOLOv8 person detection
+│   ├── face_model.py         # Face recognition
+│   ├── reid_model.py         # Body ReID (OSNet)
+│   └── gait_model.py         # Gait recognition
 │
-├── 📂 utils/                      # Utilities & helpers
-│   ├── __init__.py
-│   ├── embeddings.py              # Embedding storage/loading
-│   ├── similarity.py              # Similarity calculations
-│   ├── config.py                  # Configuration constants
-│   ├── admin_controls.py          # Admin utilities
-│   └── __pycache__/
+├── db/                       # PostgreSQL connection & models
+├── cache/                    # Redis caching layer
+├── task_queue/               # Message queue abstraction
+├── utils/                    # Utilities & helpers
+├── iot_stream/               # Camera interface
+├── embeddings_db/            # Stored person embeddings (.npy)
+├── deploy/                   # Cloud/edge deployment configs
 │
-├── 📂 iot_stream/                 # Camera interface
-│   ├── __init__.py
-│   ├── camera_reader.py           # Camera reading utilities
-│   └── __pycache__/
-│
-├── 📂 embeddings_db/              # Stored person embeddings
-│   ├── person1_face.npy
-│   ├── person1_body.npy
-│   └── person1_gait.npy
-│
-├── 📂 unknown_persons_emb/        # Unknown person embeddings
-│
-├── 📂 datasets/                   # Training/validation data
-│
-├── 📂 dashboard/                  # Dashboard assets (if any)
-│
-├── 🐍 run_tracker.py              # Single-camera entry point
-├── 🐍 run_tracker_multi.py        # Multi-camera entry point
-├── 🐍 dashboard.py                 # Streamlit dashboard
-├── 🐍 debug_scores.py             # Cross-similarity analysis
-├── 🐍 test.py                     # Installation verification
-├── 🐍 rename_person.py            # Person renaming utility
-├── 🐍 GPU.py                      # GPU availability check
-├── 🐍 requirements.txt            # Python dependencies
-├── 📄 README.md                   # This file
-├── 📄 PROJECT_SUMMARY_FOR_TEACHER.md  # Academic summary
-└── 📄 .gitignore                  # Git ignore rules
+├── run_tracker.py            # Single-camera entry point
+├── run_tracker_multi.py      # Multi-camera entry point
+├── dashboard.py              # Streamlit dashboard
+├── migrate_to_db.py          # Migrate .npy files to PostgreSQL
+├── debug_scores.py           # Cross-similarity analysis
+├── GPU.py                    # GPU availability check
+├── requirements.txt
+├── runtime.txt               # Python version pinning (3.11.0)
+├── docker-compose.yml
+├── Dockerfile.tracker
+├── Dockerfile.backend
+├── Dockerfile.dashboard
+└── README.md
 ```
 
 ---
 
 ## 🔧 Configuration
 
-### Model Configuration (`utils/config.py`)
+### `utils/config.py`
+
 ```python
-# Detection settings
+# Detection
 MODEL_PATH = "yolov8n.pt"
 CONF_THRESHOLD = 0.5
 
@@ -341,62 +286,31 @@ FACE_THRESHOLD = 0.45
 BODY_THRESHOLD = 0.99  # Effectively disabled without face
 ```
 
-### Camera Configuration
-Modify `run_tracker_multi.py` for your camera setup.
-
----
-
 ---
 
 ## 🐳 Docker Setup
 
-Containerized deployment for cross-platform support.
-
-### Quick Start
-
 ```bash
-# Copy environment file
-cp .env.example .env
-
-# Build all images
-docker-compose build
-
-# Start all services (tracker + backend + dashboard)
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop all
-docker-compose down
+cp .env.example .env       # Set up environment variables
+docker-compose build        # Build all images
+docker-compose up -d        # Start all services
+docker-compose logs -f      # View logs
+docker-compose down         # Stop all services
 ```
 
 ### Services
 
 | Service | Description | Port |
 |---------|-------------|------|
-| **tracker** | Multi-camera tracker with OpenCV | 8502 |
+| **tracker** | Multi-camera tracker | 8502 |
 | **backend** | FastAPI backend API | 8000 |
-| **dashboard** | Streamlit web dashboard | 8501 |
-| **redis** | Redis for caching and messaging | 6379 |
+| **dashboard** | Streamlit dashboard | 8501 |
+| **redis** | Redis cache & messaging | 6379 |
 
-### Platform Support
-
+**Platform notes:**
 - **Linux**: Use `docker-compose.linux.yml` override for camera access
-- **Windows**: Use `docker-compose.windows.yml` (IP cameras) or run tracker locally
+- **Windows**: Use `docker-compose.windows.yml` or run tracker locally
 - **Mac**: Run tracker locally, containerize backend + dashboard
-
-### Quick Commands (Makefile)
-
-```bash
-make build    # Build all Docker images
-make up       # Start all services
-make down     # Stop all services
-make logs     # View all logs
-make dev      # Development mode with hot-reload
-```
-
-See [DOCKER-README.md](DOCKER-README.md) for full Docker documentation.
 
 ---
 
@@ -404,413 +318,115 @@ See [DOCKER-README.md](DOCKER-README.md) for full Docker documentation.
 
 ### Hybrid Architecture (Recommended)
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     LOCAL MACHINE                             │
-│  ┌──────────────────────────────────────────────────────────┐    │
-│  │  Tracker Service (run_tracker_multi.py)               │    │
-│  │  - Camera access (webcam/IP camera)                   │    │
-│  │  - Local models (YOLO, InsightFace, OSNet)          │    │
-│  └──────────────────────────────────────────────────────────┘    │
-└──────────────────┬───────────────────────────────────────┘
-                           │ HTTP/REST API
-                           ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                     RENDER.COM (Cloud)                         │
-│  ┌─────────────────┐    ┌─────────────────┐    ┌──────────┐  │
-│  │  Backend API    │    │  Dashboard     │    │  Redis  │  │
-│  │  (FastAPI)     │◀───│  (Streamlit)  │    │  Cache  │  │
-│  │  Port: 8000    │    │  Port: 8501    │    │         │  │
-│  └─────────────────┘    └─────────────────┘    └──────────┘  │
-└─────────────────────────────────────────────────────────────────────┘
-```
+The tracker requires local camera access, while the backend and dashboard run in the cloud:
 
-**Why this architecture?**
-- Tracker needs camera access → runs locally
-- Backend/Dashboard → deployed to Render.com for remote access
-- Hybrid approach → best of both worlds
+```
+LOCAL MACHINE
+└── Tracker (run_tracker_multi.py)
+    └── Camera access, local AI models
+         │ HTTP/REST
+         ▼
+RENDER.COM
+├── Backend API (FastAPI) — Port 8000
+├── Dashboard (Streamlit)  — Port 8501
+└── Redis Cache
+```
 
 ### Deploy to Render.com
 
-1. **Push to GitHub** (triggers CI/CD):
-   ```bash
-   git add .
-   git commit -m "feat: ready for deployment"
-   git push origin main
-   ```
+1. Push to GitHub (triggers CI/CD automatically)
+2. Go to [Render.com](https://render.com) → **New +** → **Blueprint** → connect your repo
+3. Add GitHub secrets: `RENDER_DEPLOY_HOOK_BACKEND`, `RENDER_DEPLOY_HOOK_DASHBOARD`
+4. Update `config.py` with your Render URLs and run tracker locally:
 
-2. **Connect to Render**:
-   - Go to [Render.com](https://render.com) → **"New +"** → **"Blueprint"**
-   - Connect your GitHub repository
-   - Render auto-detects `render.yaml`
-
-3. **Add GitHub Secrets** (for auto-deploy):
-   - `RENDER_API_KEY`
-   - `RENDER_BACKEND_SERVICE_ID`
-   - `RENDER_DASHBOARD_SERVICE_ID`
-
-4. **Run Tracker Locally**:
-   ```bash
-   # Update config.py with Render URLs
-   BACKEND_URL = "https://biometric-backend.onrender.com"
-   DASHBOARD_URL = "https://biometric-dashboard.onrender.com"
-   USE_REMOTE_BACKEND = True
-
-   # Run tracker
-   python run_tracker_multi.py
-   ```
-
-5. **Verify**:
-   - Backend: https://biometric-backend.onrender.com/
-   - Dashboard: https://biometric-dashboard.onrender.com/
-
-### Cloud Deployment (AWS/GCP/Azure)
+```python
+BACKEND_URL = "https://biometric-backend.onrender.com"
+USE_REMOTE_BACKEND = True
+```
 
 ```bash
-# SSH into your cloud VM
-ssh user@your-vm-ip
-
-# Clone and deploy with Docker Compose
-git clone https://github.com/sarthaksenapati/biometric-tracking-system.git
-cd biometric-tracking-system
-docker-compose -f docker-compose.yml \
-             -f deploy/cloud/docker-compose.cloud.yml \
-             up -d
+python run_tracker_multi.py
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) and [deploy/](deploy/) for details.
-
-### Edge Deployment
-
-| Device | Config | Use Case |
-|--------|--------|----------|
-| **Jetson Nano** | `deploy/edge/jetson/` | On-premise surveillance with GPU |
-| **Raspberry Pi** | `deploy/edge/raspberry-pi/` | Budget edge deployment |
-
----
-
-## 🏗️ Architecture
-
-### Database-Driven (New)
-
-The system now uses **PostgreSQL** as primary storage with **Redis** for caching:
-
-| Component | Technology | Purpose |
-|-----------|-------------|---------|
-| **PostgreSQL** | PostgreSQL 16+ | Embeddings, events, detections |
-| **Redis** | Redis 7+ | Cache embeddings, recent detections |
-| **Message Queue** | Redis Streams / RabbitMQ | Async camera processing |
-
-### Schema
-
-```
-persons      → Person records (name, display_name, metadata)
-embeddings    → Face/body/gait embeddings (BYTEA, multi-exemplar)
-events       → Sightings, handoffs (with timestamps)
-cameras      → Camera status and locations
-detections   → Recent detections cache
-```
-
-### Fallback to File-Based Storage
-
-If `USE_DATABASE=false` or database is unavailable, the system automatically falls back to:
-- `.npy` files for embeddings
-- `tracker_history.json` for event history
-
-### Migration
+### Database Migration
 
 ```bash
-# Migrate existing .npy files to PostgreSQL
 export USE_DATABASE=true
-python migrate_to_db.py
+python migrate_to_db.py   # Migrate .npy files to PostgreSQL
 ```
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for full architecture documentation.
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Common Issues
+| Issue | Fix |
+|-------|-----|
+| CUDA not available | Install CUDA toolkit + compatible PyTorch. Check with `python GPU.py` |
+| Low detection accuracy | Ensure good lighting, adjust `CONF_THRESHOLD` in `config.py` |
+| Dashboard not loading | Check `tracker_state.json` exists; start tracker first |
+| Import errors | Reinstall: `pip install -r requirements.txt`, verify Python 3.10+ |
 
-1. **CUDA Not Available**
-   - Install CUDA toolkit and compatible PyTorch
-   - Check with `python GPU.py`
+---
 
-2. **Low Detection Accuracy**
-   - Ensure good lighting
-   - Adjust confidence threshold in `utils/config.py`
+## 🔮 Planned Features
 
-3. **Dashboard Not Loading**
-   - Check if `tracker_state.json` exists
-   - Start tracker first: `python run_tracker_multi.py`
-
-4. **Import Errors**
-   - Reinstall dependencies: `pip install -r requirements.txt`
-   - Check Python version (3.10+ required)
-
-### Debug Tools
-```bash
-# Test all components
-python test.py
-
-# Analyze similarity distributions
-python debug_scores.py
-
-# Check GPU availability
-python GPU.py
-```
+| Phase | Feature |
+|-------|---------|
+| Phase 5 | Image-based person search |
+| Phase 6 | Attribute-based filtering (clothing color, height, etc.) |
+| Phase 7 | Full campus map visualization |
+| Phase 8 | Advanced analytics and reporting |
 
 ---
 
 ## 📚 Academic Context
 
-This project demonstrates concepts from:
+This project demonstrates concepts from Computer Vision, Machine Learning, Deep Learning, Pattern Recognition, IoT Systems, and Multi-modal Biometric Authentication.
 
-- **Computer Vision**: Object detection, feature extraction, tracking algorithms
-- **Machine Learning**: Embedding-based similarity, multi-modal fusion
-- **Pattern Recognition**: Biometric authentication, gait signature extraction
-- **IoT Systems**: Real-time camera streams, distributed processing
-- **Surveillance Systems**: Identity management, trust-based decision making
-
-### Key Algorithms
-- **YOLOv8**: Real-time object detection
-- **ByteTrack**: Multi-object tracking
-- **OSNet**: Lightweight ReID network
-- **Cosine Similarity**: Efficient embedding comparison
-- **Weighted Fusion**: Multi-modal score combination
+**Key algorithms:** YOLOv8, ByteTrack, OSNet, Cosine Similarity, Weighted Fusion
 
 ---
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Commit changes: `git commit -m 'Add amazing feature'`
+4. Push: `git push origin feature/amazing-feature`
 5. Open a Pull Request
 
-### Development Guidelines
-- Follow PEP 8 style guidelines
-- Add docstrings to new functions
-- Test changes with `python test.py`
-- Update documentation for new features
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-**Academic Use**: This system is developed for research and educational purposes. Ensure compliance with privacy laws and ethical guidelines when deploying in real environments.
+Follow PEP 8, add docstrings to new functions, and test with `python test.py`.
 
 ---
 
 ## 👨‍💻 Authors
 
-**Prityanshu Yadav**  
-B.Tech Final Year Project  
-Department of Computer Science & Engineering
+**Prityanshu Yadav** — Project Lead, Core Development  
+B.Tech Final Year, Department of Computer Science & Engineering  
+📧 prityanshu.yadav@email.com · [GitHub](https://github.com/prityanshu-yadav) · [LinkedIn](https://linkedin.com/in/prityanshu-yadav)
 
-**Sarthak Senapati**  
-Co-Developer  
-Department of Computer Science & Engineering
+**Sarthak Senapati** — Co-Developer, Development & Testing  
+Department of Computer Science & Engineering  
+📧 sarthaksenapati566@gmail.com · [GitHub](https://github.com/sarthaksenapati) · [LinkedIn](https://linkedin.com/in/sarthaksenapati)
 
-### Acknowledgments
+---
+
+## ⭐ Acknowledgements
+
 - [Ultralytics](https://github.com/ultralytics/ultralytics) for YOLOv8
 - [InsightFace](https://github.com/deepinsight/insightface) for face recognition
 - [DeepFace](https://github.com/serengil/deepface) for fallback face model
 - [PyTorch](https://pytorch.org/) community
 - [OpenCV](https://opencv.org/) team
 
-### Contributors
-- **Prityanshu Yadav** - Project Lead, Core Development
-- **Sarthak Senapati** - Co-Developer, Development & Testing
-
 ---
 
-## 📞 Contact
+## 📄 License
 
-**Prityanshu Yadav:**
-- **Email**: prityanshu.yadav@email.com
-- **GitHub**: [@prityanshu-yadav](https://github.com/prityanshu-yadav)
-- **LinkedIn**: [Prityanshu Yadav](https://linkedin.com/in/prityanshu-yadav)
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-**Sarthak Senapati:**
-- **Email**: sarthaksenapati566@gmail.com
-- **GitHub**: [@sarthaksenapati](https://github.com/sarthaksenapati)
-- **LinkedIn**: [Sarthak Senapati](https://linkedin.com/in/sarthaksenapati)
+*Developed for academic and research purposes. Ensure compliance with privacy laws and ethical guidelines when deploying in real environments.*
 
 ---
 
 *⭐ Star this repository if you find it useful!*
-│   ├── register.py
-│   ├── recognize.py
-│   ├── register_body.py
-│   ├── recognize_body.py
-│   ├── register_gait.py
-│   └── recognize_gait.py
-│
-├── models/
-│   ├── detector.py
-│   ├── face_model.py
-│   ├── reid_model.py
-│   └── gait_model.py
-│
-├── utils/
-│   ├── embeddings.py
-│   ├── similarity.py
-│   └── config.py
-│
-├── embeddings_db/
-├── datasets/
-├── iot_stream/
-├── dashboard/
-│
-├── requirements.txt
-└── README.md
-```
-
----
-
-## ⚙️ Setup Instructions
-
-### 1️⃣ Clone Repository
-```bash
-git clone https://github.com/Prityanshu/Biometric-Tracking-System.git
-cd Biometric-Tracking-System
-```
-
-### 2️⃣ Create Virtual Environment
-```bash
-python -m venv venv
-venv\Scripts\activate
-```
-
-### 3️⃣ Install Dependencies
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## ▶️ How to Run
-
-### 🔹 Register Face
-```bash
-python -m backend.register
-```
-
-### 🔹 Recognize Face
-```bash
-python -m backend.recognize
-```
-
-### 🔹 Register Body (ReID)
-```bash
-python -m backend.register_body
-```
-
-### 🔹 Recognize Body
-```bash
-python -m backend.recognize_body
-```
-
-### 🔹 Register Gait
-```bash
-python -m backend.register_gait
-```
-> Walk in front of camera and press `S` to save.
-
-### 🔹 Recognize Gait
-```bash
-python -m backend.recognize_gait
-```
-
----
-
-## 🎯 Current Capabilities
-
-- ✔ Face-based identification
-- ✔ Body-based identification
-- ✔ Gait-based identification
-- ✔ Real-time webcam inference
-- ✔ Embedding-based similarity matching
-
----
-
-## 🔮 Future Work (Upcoming Phases)
-
-| Phase | Feature | Description |
-|-------|---------|-------------|
-| 🚧 Phase 5 | Search by Image | Input a snapshot → locate person across cameras |
-| 🚧 Phase 6 | Attribute-Based Search | Search by shirt color, pant color, height, body type, accessories |
-| 🚧 Phase 7 | Multi-Camera Tracking | Track identity across multiple streams with real-time location |
-| 🚧 Phase 8 | Dashboard & Visualization | Live monitoring, detection overlay, campus map view |
-
----
-
-## 🎓 Academic Relevance
-
-This project demonstrates concepts from Computer Vision, Machine Learning, Deep Learning, Pattern Recognition, IoT Systems, Surveillance Systems, and Multi-modal Biometric Authentication.
-
----
-
-## 📌 Key Concepts Used
-
-`Feature Embeddings` `Cosine Similarity` `Object Detection` `Person Re-Identification` `Gait Signature Extraction` `Multi-modal Biometrics`
-
----
-
-## 👨‍💻 Authors
-
-**Prityanshu Yadav** — B.Tech Final Year Project  
-Department of Computer Science & Engineering
-
-**Sarthak Senapati** — Co-Developer  
-Department of Computer Science & Engineering
-
----
-
-## 📜 License
-
-This project is for academic and research purposes.
-
----
-
-## ⭐ Acknowledgements
-
-- [Ultralytics YOLO](https://github.com/ultralytics/ultralytics)
-- [DeepFace](https://github.com/serengil/deepface)
-- [PyTorch Community](https://pytorch.org)
-- [OpenCV](https://opencv.org)
----
-
-## New in This Version
-
-### Containerization
-- **Dockerfiles** for tracker, backend, dashboard services
-- **Docker Compose** with cross-platform support (Linux/Windows/Mac)
-- **Makefile** for simplified Docker operations (`make up`, `make logs`)
-
-### Cloud Deployment
-- **Render.com** Blueprint (`render.yaml`) for backend + dashboard
-- **GitHub Actions** CI/CD (`.github/workflows/ci-cd.yml`)
-- **Hybrid architecture**: Local tracker + cloud API/dashboard
-
-### Architecture Overhaul
-- **PostgreSQL** database (replaces .npy file storage)
-- **Redis** caching layer for embeddings and detections
-- **Message Queue** support (Redis Streams / RabbitMQ)
-- **Automatic fallback** to file-based storage when DB unavailable
-
-### New Files
-| Path | Description |
-|------|-------------|
-| `db/*` | PostgreSQL connection + models |
-| `cache/*` | Redis caching layer |
-| `queue/*` | Message queue abstraction |
-| `deploy/*` | Cloud/edge deployment configs |
-| `ARCHITECTURE.md` | Full architecture documentation |
-| `DEPLOYMENT.md` | Deployment guide |
-| `runtime.txt` | Python version pinning for Render (3.11.0) |
