@@ -1,22 +1,17 @@
 import numpy as np
 
+from utils.config import GALLERY_FUSION_WEIGHTS
+
 
 class FusionEngine:
     def __init__(self):
-        # Weights rebalanced after OSNet 567/567 fix.
-        # Previous analysis was done with broken gate weights (522/567),
-        # which made body embeddings unreliable — hence the 0.95 face dominance.
-        # With correct OSNet weights, body is now a strong signal:
-        #
+        # Weights are centralized in utils/config.py (GALLERY_FUSION_WEIGHTS) as
+        # the single source of truth. Rationale:
         #   face:  0.65  — primary signal, high discriminability
-        #   body:  0.35  — strong secondary signal (OSNet MSMT17 fully loaded)
+        #   body:  0.35  — strong secondary signal (OSNet MSMT17 when loaded)
         #   gait:  0.01  — frontal camera limits gait utility, near-zero weight
-        #
-        self.default_weights = {
-            "face": 0.65,
-            "body": 0.35,
-            "gait": 0.01
-        }
+        # A copy is taken so per-instance tweaks never mutate the shared dict.
+        self.default_weights = dict(GALLERY_FUSION_WEIGHTS)
 
     def compute_final_score(
         self,

@@ -14,6 +14,7 @@ from models.reid_model import ReIDModel
 from models.gait_model import GaitModel
 from core.matcher      import Matcher
 from utils.embeddings  import save_embedding
+from utils.config      import CACHE_FUSION_WEIGHTS, ENROLL_MATCH_WEIGHTS
 from monitoring.metrics import ModelLoadTimer
 
 
@@ -61,7 +62,8 @@ class SharedIdentityCache:
     THRESHOLD_WITH_FACE = 0.55
     THRESHOLD_NO_FACE   = 0.62
     FRESH_TTL           = 45.0
-    _W = {"face": 0.50, "body": 0.30, "gait": 0.15, "cloth": 0.05}
+    # Weights centralized in utils/config.py (CACHE_FUSION_WEIGHTS).
+    _W = CACHE_FUSION_WEIGHTS
 
     def __init__(self):
         self._store: dict = {}
@@ -355,6 +357,15 @@ class AutoEnroller:
                 })
         return result
 
+    def drop_tracks(self, track_keys):
+        """Remove stale (cam_id, track_id) → label mappings. Candidates and
+        their accumulated embeddings are kept (a person may re-appear under a
+        new track id and re-link by similarity); only the unbounded track map
+        is trimmed."""
+        with self._lock:
+            for key in track_keys:
+                self._track_map.pop(key, None)
+
     def reset(self):
         """Clear all candidates and track mappings. Called by admin controls."""
         with self._lock:
@@ -404,10 +415,10 @@ class AutoEnroller:
             sims, weights = [], []
             if face_emb is not None and rep_face is not None:
                 sims.append(_cosine_sim(face_emb, rep_face))
-                weights.append(0.65)
+                weights.append(ENROLL_MATCH_WEIGHTS["face"])
             if body_emb is not None and rep_body is not None:
                 sims.append(_cosine_sim(body_emb, rep_body))
-                weights.append(0.35)
+                weights.append(ENROLL_MATCH_WEIGHTS["body"])
             if not sims:
                 continue
 
@@ -760,6 +771,7 @@ class MultiCameraTracker:
     RETRY_INTERVAL          = 3.0
     CACHE_DEPOSIT_THRESHOLD = 0.55
     PROCESS_EVERY_N_FRAMES  = 2
+    TRACK_TTL_SECONDS       = 30.0   # drop per-track buffers unseen this long
 
     def __init__(self, cam_sources: dict, cam_locations: dict = None):
         print("\n[MULTI] Loading shared models...")
@@ -799,6 +811,7 @@ class MultiCameraTracker:
         self._readers:        dict = {}
         self.gait_buffers:    dict = {}
         self.pred_buffers:    dict = {}
+        self._track_last_seen: dict = {}   # (cam_id, track_id) → last seen ts
         self._last_results:   dict = {}
         self._frame_counters: dict = {}
         self._frame_buffer:   dict = {}
@@ -857,6 +870,21 @@ class MultiCameraTracker:
         if cam_id in self._readers:
             self._readers[cam_id].replace_cap(cap)
         return cap.isOpened()
+
+    def _prune_stale_tracks(self):
+        """Drop per-track buffers for tracks not seen within TRACK_TTL_SECONDS.
+        Without this, gait_buffers / pred_buffers / track maps grow unbounded
+        as ByteTrack mints new ids over a long-running feed (memory leak)."""
+        cutoff = time.time() - self.TRACK_TTL_SECONDS
+        stale = [k for k, ts in self._track_last_seen.items() if ts < cutoff]
+        for key in stale:
+            self.gait_buffers.pop(key, None)
+            self.pred_buffers.pop(key, None)
+            self._track_last_seen.pop(key, None)
+        if stale:
+            # Also release the enroller's track→label map for these tracks.
+            self.auto_enroller.drop_tracks(stale)
+            print(f"[MULTI] 🧹 pruned {len(stale)} stale track buffers")
 
     def _gait_buf(self, cam_id, tid) -> deque:
         key = (cam_id, tid)
@@ -984,7 +1012,11 @@ class MultiCameraTracker:
                 pass
 
         for idx, det in enumerate(detections):
-            track_id        = det.get("track_id") or idx
+            # A valid ByteTrack id of 0 is falsy, so `or idx` would wrongly
+            # discard it and risk buffer collisions — test against None instead.
+            tid_raw         = det.get("track_id")
+            track_id        = tid_raw if tid_raw is not None else idx
+            self._track_last_seen[(cam_id, track_id)] = now
             x1, y1, x2, y2 = det["bbox"]
             h, w            = frame.shape[:2]
             pad             = 10
@@ -1064,8 +1096,14 @@ class MultiCameraTracker:
                     name, score, source_tag = "Unknown", 0.0, "none"
 
             # ── Step 5: Cache deposit (known persons only) ────────────────
+            # Two-tier trust model: the cache may IDENTIFY a person without a
+            # face (body+gait+clothing), but it may only be SEEDED/refreshed by
+            # a face-confident frame. Requiring face_visible here means every
+            # cache entry traces back to a real face match, so the no-face query
+            # path can never bootstrap an identity from body/clothing alone.
             if name != "Unknown" \
                     and source_tag in ("matcher", "cache") \
+                    and face_visible \
                     and score >= self.CACHE_DEPOSIT_THRESHOLD:
                 self.id_cache.deposit(
                     name, cam_id, loc, score,
@@ -1269,6 +1307,7 @@ class MultiCameraTracker:
             evict_counter += 1
             if evict_counter >= 150:
                 self.identity_manager.evict_stale_people()
+                self._prune_stale_tracks()
                 evict_counter = 0
 
             if not display:

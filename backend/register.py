@@ -5,8 +5,12 @@ import numpy as np
 from models.face_model import FaceRecognizer
 from models.detector import PersonDetector
 from utils.embeddings import save_embedding
+from config import DROIDCAM_IP, DROIDCAM_PORT
 
-DROIDCAM_URL = "http://192.168.220.178:4747/video"
+# Derived from config.py (single source of truth) — previously this file
+# hardcoded a different IP than config.py / register_body.py / register_gait.py,
+# so the face-registration camera could silently point at the wrong device.
+DROIDCAM_URL = f"http://{DROIDCAM_IP}:{DROIDCAM_PORT}/video"
 
 
 def select_camera():

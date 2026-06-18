@@ -22,6 +22,18 @@ def cosine_similarity(a, b):
 
     b = np.array(b, dtype=np.float32)
 
+    # Dimension guard: the live query and the stored gallery vector must share
+    # the same feature dimension. They won't if the gallery was built with one
+    # backbone (e.g. ResNet50, 2048-D) and inference runs another (e.g. OSNet,
+    # 512-D). Without this guard the matmul/dot below raises and crashes
+    # identify(); here we treat a mismatch as "no match" so the system degrades
+    # gracefully and logs instead of dying.
+    if b.shape[-1] != a.shape[-1]:
+        print(f"[Matcher] ⚠️  embedding dim mismatch: query={a.shape[-1]} "
+              f"vs gallery={b.shape[-1]} — skipping (rebuild gallery for the "
+              f"active model)")
+        return None
+
     # Multi-exemplar: shape (N, 512)
     if b.ndim == 2:
         norms = np.linalg.norm(b, axis=1, keepdims=True)

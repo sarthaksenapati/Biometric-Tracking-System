@@ -79,7 +79,9 @@ class LiveTracker:
         results    = []
 
         for idx, det in enumerate(detections):
-            track_id = det.get("track_id") or idx
+            # A valid track id of 0 is falsy; `or idx` would discard it.
+            tid_raw = det.get("track_id")
+            track_id = tid_raw if tid_raw is not None else idx
             record_detection(self.cam_id)
 
             x1, y1, x2, y2 = det["bbox"]

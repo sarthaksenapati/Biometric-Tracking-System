@@ -198,9 +198,36 @@ class ReIDModel:
 
         if os.path.exists(path):
             self.model = self._load_osnet(path)
+            self.backend       = "osnet"
+            self.embedding_dim = 512
         else:
-            print(f"[ReIDModel] ⚠️  {path} not found — ResNet50 fallback")
-            self.model = self._fallback_resnet()
+            # OSNet weights absent → ImageNet ResNet50 is NOT a person-ReID model.
+            # This used to be a one-line silent warning, which is how the gallery
+            # ended up built on ResNet50 (2048-D) while the README claimed OSNet
+            # (512-D). Make the downgrade impossible to miss, and allow callers to
+            # force a hard failure in production via REID_REQUIRE_OSNET=1.
+            require = os.environ.get("REID_REQUIRE_OSNET", "").lower() in (
+                "1", "true", "yes",
+            )
+            if require:
+                raise FileNotFoundError(
+                    f"[ReIDModel] OSNet weights not found at '{path}' and "
+                    f"REID_REQUIRE_OSNET is set — refusing to start on the "
+                    f"ResNet50 fallback (degrades body re-ID accuracy)."
+                )
+            print("=" * 72)
+            print(f"[ReIDModel] ⚠️  OSNet weights NOT FOUND at: {path}")
+            print("[ReIDModel] ⚠️  Falling back to ImageNet ResNet50 (2048-D).")
+            print("[ReIDModel] ⚠️  ResNet50 is NOT a person re-ID model — body")
+            print("[ReIDModel] ⚠️  matching accuracy is significantly degraded.")
+            print("[ReIDModel] ⚠️  OSNet (512-D) and ResNet50 (2048-D) embeddings")
+            print("[ReIDModel] ⚠️  are NOT comparable; rebuild the gallery if you")
+            print("[ReIDModel] ⚠️  change backbones. Set REID_REQUIRE_OSNET=1 to")
+            print("[ReIDModel] ⚠️  fail fast instead of silently downgrading.")
+            print("=" * 72)
+            self.model         = self._fallback_resnet()
+            self.backend       = "resnet50"
+            self.embedding_dim = 2048
 
         self.model.eval()
 

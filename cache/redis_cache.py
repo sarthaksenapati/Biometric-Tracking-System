@@ -1,26 +1,95 @@
 import os
+import io
 import json
-import pickle
+import base64
 import time
 import numpy as np
 
+# ── Safe serialization (replaces pickle — pickle.loads on untrusted Redis
+#    data is a remote-code-execution risk) ─────────────────────────────────
+#
+# We encode arbitrary nested dict/list structures as JSON. numpy arrays are
+# stored as base64-encoded .npy blobs and reloaded with allow_pickle=False,
+# so a malicious cache value can never execute code on load.
+
+_NDARRAY_TAG = "__ndarray_b64__"
+
+
+def _to_jsonable(obj):
+    """Recursively convert obj (dicts, lists, ndarrays, scalars) to a
+    JSON-serializable structure. No pickle, no executable payloads."""
+    if isinstance(obj, np.ndarray):
+        buf = io.BytesIO()
+        np.save(buf, obj, allow_pickle=False)
+        return {_NDARRAY_TAG: base64.b64encode(buf.getvalue()).decode("ascii")}
+    if isinstance(obj, dict):
+        return {str(k): _to_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_to_jsonable(v) for v in obj]
+    if isinstance(obj, (np.floating, np.integer)):
+        return obj.item()
+    return obj  # str, int, float, bool, None
+
+
+def _from_jsonable(obj):
+    """Inverse of _to_jsonable. Rebuilds ndarrays from tagged base64 blobs."""
+    if isinstance(obj, dict):
+        if len(obj) == 1 and _NDARRAY_TAG in obj:
+            raw = base64.b64decode(obj[_NDARRAY_TAG])
+            return np.load(io.BytesIO(raw), allow_pickle=False)
+        return {k: _from_jsonable(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_from_jsonable(v) for v in obj]
+    return obj
+
+
+def _safe_dumps(obj) -> bytes:
+    return json.dumps(_to_jsonable(obj)).encode("utf-8")
+
+
+def _safe_loads(data):
+    return _from_jsonable(json.loads(data))
+
+
 # ── Connection ─────────────────────────────────────────────────────────────
+#
+# A single shared ConnectionPool is created lazily and reused for every client.
+# Previously each call did redis.from_url(...) which built a NEW TCP connection
+# (plus an extra ping round-trip) every time — set_shared_identity_cache runs on
+# every cache deposit in the inference loop, so that was a real per-frame cost.
+# With an external pool, client.close() just returns the connection to the pool
+# instead of tearing it down, so the existing close() calls stay correct.
 
 def _get_redis_url():
     return os.environ.get("REDIS_URL", "redis://localhost:6379")
 
 
+_redis_pool = None
+
+
+def _get_pool():
+    global _redis_pool
+    if _redis_pool is None:
+        import redis
+        _redis_pool = redis.ConnectionPool.from_url(
+            _get_redis_url(), decode_responses=False
+        )
+    return _redis_pool
+
+
 def get_redis_client():
     import redis
-    url = _get_redis_url()
-    client = redis.from_url(url, decode_responses=False)
-    client.ping()  # Test connection
-    return client
+    # Lightweight client over the shared pool. No ping here — callers either
+    # ping explicitly (_redis_available, health checks) or immediately issue a
+    # command that will surface a connection error, so the extra round-trip is
+    # unnecessary on the hot path.
+    return redis.Redis(connection_pool=_get_pool())
 
 
 def _redis_available():
     try:
         client = get_redis_client()
+        client.ping()   # explicit liveness check (get_redis_client no longer pings)
         client.close()
         return True
     except Exception:
@@ -40,7 +109,7 @@ def set_cached_embeddings(modality, data, ttl=EMBEDDING_TTL):
         return False
     try:
         client = get_redis_client()
-        serialized = pickle.dumps(data)
+        serialized = _safe_dumps(data)
         client.setex(f"embeddings:{modality}", ttl, serialized)
         client.close()
         return True
@@ -58,7 +127,7 @@ def get_cached_embeddings(modality):
         data = client.get(f"embeddings:{modality}")
         client.close()
         if data:
-            return pickle.loads(data)
+            return _safe_loads(data)
         return None
     except Exception as e:
         print(f"[REDIS] get_cached_embeddings failed: {e}")
@@ -183,7 +252,7 @@ def set_shared_identity_cache(store_dict):
         return False
     try:
         client = get_redis_client()
-        serialized = pickle.dumps(store_dict)
+        serialized = _safe_dumps(store_dict)
         client.setex(SHARED_CACHE_KEY, SHARED_CACHE_TTL, serialized)
         client.close()
         return True
@@ -201,7 +270,7 @@ def get_shared_identity_cache():
         data = client.get(SHARED_CACHE_KEY)
         client.close()
         if data:
-            return pickle.loads(data)
+            return _safe_loads(data)
         return None
     except Exception as e:
         print(f"[REDIS] get_shared_identity_cache failed: {e}")

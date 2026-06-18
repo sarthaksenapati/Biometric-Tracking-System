@@ -1,0 +1,70 @@
+%% Multi-Modal Biometric Tracking System — end-to-end architecture
+%% Render at https://mermaid.live or any Mermaid-aware viewer (GitHub renders it inline).
+flowchart TD
+    subgraph Input["Capture Layer"]
+        CAM["Cameras / DroidCam / Webcam<br/>(config.py: CAMERA_SOURCES)"]
+        CR["CameraReader threads<br/>latest-frame buffer, auto-reconnect"]
+        CAM --> CR
+    end
+
+    subgraph Detect["Detection and Feature Extraction"]
+        YOLO["PersonDetector<br/>YOLOv8 + ByteTrack"]
+        CROP["Per-person crop + padding<br/>keyed by track_id"]
+        FACE["FaceRecognizer<br/>InsightFace -> DeepFace fallback"]
+        BODY["ReIDModel<br/>OSNet -> ResNet50 fallback"]
+        GAIT["GaitModel<br/>GEI silhouette, buffer >= 5"]
+        CLOTH["Clothing HSV histogram"]
+        CR --> YOLO --> CROP
+        CROP --> FACE
+        CROP --> BODY
+        CROP --> GAIT
+        CROP --> CLOTH
+    end
+
+    subgraph Resolve["Identity Resolution — 4 stages"]
+        MATCH["1. Matcher<br/>gallery cosine + FusionEngine<br/>FACE REQUIRED for trusted match"]
+        CACHE["2. SharedIdentityCache<br/>cross-camera re-ID, face-optional query<br/>seeded ONLY by face-confident frames"]
+        ENROLL["3. AutoEnroller<br/>collect 12 face + 12 body, then promote"]
+        SMOOTH["4. Prediction buffer<br/>majority vote over 7 frames"]
+        FACE --> MATCH
+        BODY --> MATCH
+        GAIT --> MATCH
+        FACE --> CACHE
+        BODY --> CACHE
+        GAIT --> CACHE
+        CLOTH --> CACHE
+        MATCH -- Unknown --> CACHE
+        CACHE -- none --> ENROLL
+        MATCH --> SMOOTH
+        CACHE --> SMOOTH
+        ENROLL --> SMOOTH
+    end
+
+    subgraph Store["Storage"]
+        NPY["embeddings_db/*.npy"]
+        PG["PostgreSQL<br/>persons + embeddings"]
+        RED["Redis<br/>cache + history<br/>(safe JSON+npy codec, no pickle)"]
+    end
+    MATCH <--> NPY
+    MATCH <--> PG
+    MATCH <--> RED
+    ENROLL --> NPY
+    ENROLL --> PG
+    CACHE <--> RED
+
+    subgraph Track["Tracking and Events"]
+        GIM["GlobalIdentityManager<br/>sightings, camera handoffs, retention"]
+        SMOOTH --> GIM
+    end
+
+    subgraph Out["Output and Operations"]
+        STATE["tracker_state.json"]
+        DASH["Streamlit Dashboard<br/>(DASHBOARD_ACCESS_CODE gated)"]
+        API["FastAPI backend<br/>/health /alerts /metrics<br/>(API_KEY gated)"]
+        PROM["Prometheus + Grafana"]
+        ALERT["AlertManager + webhooks"]
+        GIM --> STATE --> DASH
+        Detect -. metrics .-> PROM
+        API --> PROM
+        Track --> ALERT
+    end

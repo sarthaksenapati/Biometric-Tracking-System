@@ -3,7 +3,7 @@
 import os
 import json
 import time
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, Header, HTTPException
 from fastapi.responses import PlainTextResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -11,6 +11,28 @@ app = FastAPI()
 
 # Instrument the app with Prometheus metrics
 Instrumentator().instrument(app).expose(app)
+
+
+# ── Authentication ───────────────────────────────────────────────
+#
+# Sensitive endpoints (metrics, alerts, detailed health) expose biometric
+# and operational data, so they require a shared secret when one is set.
+# Auth is DISABLED automatically if API_KEY is not configured, so local
+# development keeps working with no setup. Set API_KEY in the environment
+# (and have callers send it as the `X-API-Key` header) to lock it down in
+# any networked/Render deployment.
+#
+# Liveness ("/health/live") and the root health-check ("/") stay open so
+# container/orchestrator probes keep functioning.
+
+API_KEY = os.environ.get("API_KEY")
+
+
+def require_api_key(x_api_key: str | None = Header(default=None)):
+    if not API_KEY:
+        return  # auth disabled (no secret configured)
+    if x_api_key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
 # ── Health Check Endpoints ──────────────────────────────────────
@@ -21,7 +43,7 @@ def health_live():
 
 
 @app.get("/health/ready")
-def health_ready():
+def health_ready(_: None = Depends(require_api_key)):
     checks = {}
     overall = "healthy"
 
@@ -53,7 +75,7 @@ def health_ready():
 
 
 @app.get("/health/cameras")
-def health_cameras():
+def health_cameras(_: None = Depends(require_api_key)):
     cameras = {}
     try:
         if os.path.exists("tracker_state.json"):
@@ -77,7 +99,7 @@ def health_cameras():
 
 
 @app.get("/health/models")
-def health_models():
+def health_models(_: None = Depends(require_api_key)):
     models = {}
     try:
         from database.db import DB_AVAILABLE
@@ -91,16 +113,26 @@ def health_models():
     except Exception:
         models["redis_cache"] = "error"
 
-    models["detector"] = "not_loaded"
-    models["face_model"] = "not_loaded"
-    models["reid_model"] = "not_loaded"
-    models["gait_model"] = "not_loaded"
+    # The detector / face / reid / gait models are loaded inside the separate
+    # tracker process (run_tracker_multi.py), not in this API process, so this
+    # endpoint genuinely cannot observe their load state. Report that honestly
+    # rather than emitting a hardcoded "not_loaded" that looks like a failure.
+    for m in ("detector", "face_model", "reid_model", "gait_model"):
+        models[m] = "external_process"
 
-    return {"status": "healthy", "models": models}
+    # Overall status reflects only what this process can actually verify.
+    backing_ok = models.get("database") == "loaded" or models.get("redis_cache") == "loaded"
+    status = "healthy" if backing_ok else "degraded"
+    return {
+        "status": status,
+        "models": models,
+        "note": "model load-state is tracked in the tracker process; query its "
+                "Prometheus metrics (biometric_model_load_time_seconds) for that.",
+    }
 
 
 @app.get("/health/full")
-def health_full():
+def health_full(_: None = Depends(require_api_key)):
     live = health_live()
     ready = health_ready()
     cams = health_cameras()
@@ -132,7 +164,7 @@ def health_full():
 # ── Alerts Endpoint ─────────────────────────────────────────
 
 @app.get("/alerts")
-def get_alerts():
+def get_alerts(_: None = Depends(require_api_key)):
     try:
         from monitoring.alerts import get_alert_manager
         manager = get_alert_manager()
@@ -144,7 +176,7 @@ def get_alerts():
 # ── Prometheus Metrics ─────────────────────────────────────────
 
 @app.get("/metrics")
-def metrics():
+def metrics(_: None = Depends(require_api_key)):
     from monitoring.metrics import get_metrics
     return PlainTextResponse(get_metrics(), media_type="text/plain")
 

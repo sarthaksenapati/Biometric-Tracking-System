@@ -72,6 +72,34 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Access gate
+# This dashboard exposes biometric identities and location traces, so it is
+# protected by a shared access code when DASHBOARD_ACCESS_CODE is set in the
+# environment. If the variable is unset, the gate is disabled automatically so
+# local development needs no setup. Set it (and keep it secret) for any
+# networked / Render deployment.
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _require_access_code():
+    access_code = os.environ.get("DASHBOARD_ACCESS_CODE")
+    if not access_code:
+        return  # auth disabled (no code configured)
+    if st.session_state.get("_authed"):
+        return
+    st.markdown("### 🔒 Restricted dashboard")
+    st.caption("This view contains biometric and location data. Enter the access code to continue.")
+    entered = st.text_input("Access code", type="password")
+    if entered and entered == access_code:
+        st.session_state["_authed"] = True
+        st.rerun()
+    elif entered:
+        st.error("Incorrect access code.")
+    st.stop()
+
+
+_require_access_code()
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Helper: format age
 # (defined early so it can be called anywhere below, including the sidebar)
 # ─────────────────────────────────────────────────────────────────────────────
