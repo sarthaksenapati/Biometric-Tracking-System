@@ -1,4 +1,5 @@
 import os
+import time
 import numpy as np
 from core.fusion_engine import FusionEngine
 
@@ -160,8 +161,17 @@ class Matcher:
               f"{len(self.database)} persons now in DB: "
               f"{list(self.database.keys())}")
 
+    def _observe_latency(self, start_time):
+        try:
+            from monitoring.metrics import observe_matching_latency
+            observe_matching_latency(time.time() - start_time)
+        except Exception:
+            pass
+
     def identify(self, face_emb=None, body_emb=None, gait_emb=None):
+        _start = time.time()
         if not self.database:
+            self._observe_latency(_start)
             return "Unknown", 0.0
 
         scores = []
@@ -200,15 +210,19 @@ class Matcher:
 
         if not best_trusted:
             print(f"[MATCHER] ❌  → Unknown (no face — refusing to guess)")
+            self._observe_latency(_start)
             return "Unknown", best_score
 
         if best_score < active_threshold:
             print(f"[MATCHER] ❌  → Unknown (score too low: {best_score:.3f} < {active_threshold:.2f})")
+            self._observe_latency(_start)
             return "Unknown", best_score
 
         if margin < self.MARGIN:
             print(f"[MATCHER] ❌  → Unknown (margin too small: {margin:.3f} < {self.MARGIN})")
+            self._observe_latency(_start)
             return "Unknown", best_score
 
         print(f"[MATCHER] ✅  → {best_person}")
+        self._observe_latency(_start)
         return best_person, best_score

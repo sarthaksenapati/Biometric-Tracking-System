@@ -101,7 +101,7 @@ class FaceRecognizer:
 
     def _deepface_embedding(self, img):
         try:
-            result = self.app.represent(
+            result = self.DeepFace.represent(
                 img,
                 model_name="Facenet",
                 enforce_detection=False

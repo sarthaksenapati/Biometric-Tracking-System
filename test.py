@@ -20,10 +20,10 @@ try:
         print(f"           VRAM total     : {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
         print(f"           VRAM allocated : {torch.cuda.memory_allocated(0) / 1024**2:.0f} MB")
     else:
-        print("  ❌  CUDA not available — install torch with CUDA support:")
+        print("  [FAIL]  CUDA not available — install torch with CUDA support:")
         print("      pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121")
 except ImportError:
-    print("[PyTorch]  ❌  Not installed")
+    print("[PyTorch]  [FAIL]  Not installed")
     cuda_ok = False
 
 # ── 2. ONNX Runtime ───────────────────────────────────────────────────────────
@@ -34,13 +34,13 @@ try:
     print(f"[ONNX RT]  version={ort.__version__}")
     print(f"           Providers: {providers}")
     if "CUDAExecutionProvider" in providers:
-        print("           ✅  CUDAExecutionProvider available")
+        print("           [OK]  CUDAExecutionProvider available")
     else:
-        print("           ❌  CUDAExecutionProvider NOT available")
+        print("           [FAIL]  CUDAExecutionProvider NOT available")
         print("               Fix: pip install onnxruntime-gpu")
         print("               Then: pip uninstall onnxruntime  (remove CPU version)")
 except ImportError:
-    print("[ONNX RT]  ❌  Not installed — InsightFace needs this")
+    print("[ONNX RT]  [FAIL]  Not installed — InsightFace needs this")
 
 # ── 3. InsightFace ────────────────────────────────────────────────────────────
 print()
@@ -58,9 +58,9 @@ try:
         provider = getattr(model.session, "get_providers", lambda: ["unknown"])()
         print(f"           Model '{model_name}' → provider={provider[0]}")
 
-    print("           ✅  InsightFace loaded")
+    print("           [OK]  InsightFace loaded")
 except Exception as e:
-    print(f"[InsightFace] ❌  Error: {e}")
+    print(f"[InsightFace] [FAIL]  Error: {e}")
 
 # ── 4. YOLO (Ultralytics) ─────────────────────────────────────────────────────
 print()
@@ -71,21 +71,21 @@ try:
     device = next(model.model.parameters()).device
     print(f"[YOLO]     device={device}")
     if "cuda" in str(device):
-        print("           ✅  YOLO on GPU")
+        print("           [OK]  YOLO on GPU")
     else:
-        print("           ❌  YOLO on CPU — fix in detector.py (see below)")
+        print("           [FAIL]  YOLO on CPU — fix in detector.py (see below)")
 except Exception as e:
-    print(f"[YOLO]     ❌  Error: {e}")
+    print(f"[YOLO]     [FAIL]  Error: {e}")
 
 # ── 5. Torchreid / OSNet ──────────────────────────────────────────────────────
 print()
 try:
     import torchreid
-    print(f"[Torchreid] ✅  installed")
+    print(f"[Torchreid] [OK]  installed")
     if cuda_ok:
         print(f"            Will use GPU automatically if model is moved to cuda")
     else:
-        print(f"            ❌  No CUDA — will run on CPU")
+        print(f"            [FAIL]  No CUDA — will run on CPU")
 except ImportError:
     try:
         import torch
@@ -99,13 +99,13 @@ except ImportError:
         if reid_files:
             print(f"[ReID]     Found model files: {reid_files}")
         else:
-            print("[Torchreid] Not installed (pip install torchreid)")
+            print("[Torchreid] [FAIL]  Not installed (pip install torchreid)")
     except:
         pass
 
 # ── 6. Summary ────────────────────────────────────────────────────────────────
 print("\n" + "="*60)
-print("  WHAT TO DO IF SOMETHING IS ❌")
+print("  WHAT TO DO IF SOMETHING IS [FAIL]")
 print("="*60)
 print("""
 InsightFace on CPU?

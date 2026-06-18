@@ -14,6 +14,7 @@ from models.reid_model import ReIDModel
 from models.gait_model import GaitModel
 from core.matcher      import Matcher
 from utils.embeddings  import save_embedding
+from monitoring.metrics import ModelLoadTimer
 
 
 ADMIN_CONTROL_FILE = "tracker_admin.json"

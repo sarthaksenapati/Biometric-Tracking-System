@@ -1,0 +1,68 @@
+[
+  {
+    "id": "camera_offline_1777378083",
+    "type": "camera_offline",
+    "message": "Camera 0 (Main Entrance) went offline",
+    "severity": "error",
+    "camera_id": 0,
+    "details": {},
+    "timestamp": 1777378083.3807988,
+    "datetime": "2026-04-28T17:38:03.380802",
+    "resolved": false
+  },
+  {
+    "id": "camera_offline_1777378100",
+    "type": "camera_offline",
+    "message": "Camera 0 (Main Entrance) is back online",
+    "severity": "info",
+    "camera_id": 0,
+    "details": {},
+    "timestamp": 1777378100.0067177,
+    "datetime": "2026-04-28T17:38:20.006720",
+    "resolved": false
+  },
+  {
+    "id": "camera_offline_1777379637",
+    "type": "camera_offline",
+    "message": "Camera 1 (Hallway) is back online",
+    "severity": "info",
+    "camera_id": 1,
+    "details": {},
+    "timestamp": 1777379637.0789354,
+    "datetime": "2026-04-28T18:03:57.078939",
+    "resolved": false
+  },
+  {
+    "id": "camera_offline_1777379673",
+    "type": "camera_offline",
+    "message": "Camera 0 (Main Entrance) went offline",
+    "severity": "error",
+    "camera_id": 0,
+    "details": {},
+    "timestamp": 1777379673.2205348,
+    "datetime": "2026-04-28T18:04:33.220538",
+    "resolved": false
+  },
+  {
+    "id": "camera_offline_1777379805",
+    "type": "camera_offline",
+    "message": "Camera 0 (Main Entrance) went offline",
+    "severity": "error",
+    "camera_id": 0,
+    "details": {},
+    "timestamp": 1777379805.467416,
+    "datetime": "2026-04-28T18:06:45.467419",
+    "resolved": false
+  },
+  {
+    "id": "camera_offline_1777379981",
+    "type": "camera_offline",
+    "message": "Camera 0 (Main Entrance) is back online",
+    "severity": "info",
+    "camera_id": 0,
+    "details": {},
+    "timestamp": 1777379981.633172,
+    "datetime": "2026-04-28T18:09:41.633175",
+    "resolved": false
+  }
+]
